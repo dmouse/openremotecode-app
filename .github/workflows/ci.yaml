@@ -14,8 +14,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out code
+      - name: Check out mobile
         uses: actions/checkout@v4
+        with:
+          path: mobile
+
+      # Several tests (e.g. test/support/mcp_fakes.dart) read shared protocol
+      # test fixtures via a relative ../packages/protocol/... path rather than
+      # a duplicated copy, so compatibility is checked against the real
+      # fixtures. Check out that repo as a workspace-relative sibling so the
+      # path resolves the same way it does in the original monorepo layout.
+      - name: Check out packages (protocol fixtures)
+        uses: actions/checkout@v4
+        with:
+          repository: dmouse/openremotecode-plugin
+          path: packages
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -24,16 +37,20 @@ jobs:
           cache: true
 
       - name: Install dependencies
+        working-directory: mobile
         run: flutter pub get
 
       - name: Analyze
+        working-directory: mobile
         run: flutter analyze
 
       # Enforces the layering rules in AGENTS.md (UI must not import platform/
       # or raw storage/network packages; platform/ must not import feature
       # code besides domain/ types).
       - name: Import boundary lint
+        working-directory: mobile
         run: dart run import_lint
 
       - name: Test
+        working-directory: mobile
         run: flutter test
