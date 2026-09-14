@@ -11,6 +11,9 @@ permissions:
 jobs:
   build-signed-apk:
     runs-on: ubuntu-latest
+    # The signing secrets live on the release environment, not the repository.
+    # Without this the secrets below resolve to empty strings.
+    environment: release
 
     steps:
       - name: Check out mobile
