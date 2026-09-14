@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      # Enforces the layering rules in AGENTS.md (UI must not import platform/
+      # or raw storage/network packages; platform/ must not import feature
+      # code besides domain/ types).
+      - name: Import boundary lint
+        run: dart run import_lint
+
+      - name: Test
+        run: flutter test
