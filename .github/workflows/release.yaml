@@ -1,0 +1,73 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-signed-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out mobile
+        uses: actions/checkout@v4
+        with:
+          path: mobile
+
+      # Matches the sibling checkout layout used by ci.yaml: some tests (and
+      # this workflow's shared setup) expect ../packages to resolve the same
+      # way it does in the original monorepo.
+      - name: Check out packages (protocol fixtures)
+        uses: actions/checkout@v4
+        with:
+          repository: dmouse/openremotecode-plugin
+          path: packages
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Decode signing keystore
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: base64 --decode <<< "$ANDROID_KEYSTORE_BASE64" > release.keystore.jks
+
+      - name: Write key.properties
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cat > key.properties <<EOF
+          storeFile=release.keystore.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
+      - name: Build signed release APK
+        working-directory: mobile
+        run: flutter build apk --release
+
+      - name: Attach APK to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mobile/build/app/outputs/flutter-apk/app-release.apk
