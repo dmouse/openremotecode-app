@@ -1,0 +1,45 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+
+plugins:
+  import_lint: 2.0.0
+
+import_lint:
+  severity: error
+  rules:
+    # UI widgets present state only. They may hold a data-layer type for
+    # constructor injection (e.g. `ChatRepository repository`), but must
+    # never reach into native storage, networking, or platform adapters
+    # directly. See mobile/AGENTS.md "First-Iteration Flutter Conventions".
+    #
+    # Note: import_lint only matches `package:`-prefixed import targets, so
+    # this cannot also forbid bare `dart:io` imports in ui/ — nothing in the
+    # codebase does that today (verified), but it isn't machine-enforced.
+    ui_no_platform_imports:
+      target: "package:openremotecode/**/ui/**.dart"
+      from: "package:openremotecode/platform/**.dart"
+      except: []
+    ui_no_http_imports:
+      target: "package:openremotecode/**/ui/**.dart"
+      from: "package:http/**.dart"
+      except: []
+    ui_no_shared_preferences_imports:
+      target: "package:openremotecode/**/ui/**.dart"
+      from: "package:shared_preferences/**.dart"
+      except: []
+    ui_no_secure_storage_imports:
+      target: "package:openremotecode/**/ui/**.dart"
+      from: "package:flutter_secure_storage/**.dart"
+      except: []
+    # Platform adapters stay feature-agnostic, except for depending on
+    # plain domain/product types (e.g. ServerEndpoint) as parameter types —
+    # AGENTS.md calls these "stable product types" shared across layers.
+    platform_no_feature_imports:
+      target: "package:openremotecode/platform/**.dart"
+      from: "package:openremotecode/features/**.dart"
+      except: ["package:openremotecode/features/**/domain/**.dart"]

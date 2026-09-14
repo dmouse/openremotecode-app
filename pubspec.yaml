@@ -1,0 +1,29 @@
+name: openremotecode
+description: "Secure remote access to your local OpenCode workspace."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  crypto: ^3.0.7
+  flutter:
+    sdk: flutter
+  flutter_markdown_plus: 1.0.12
+  flutter_secure_storage: ^10.0.0
+  google_sign_in: ^7.2.0
+  markdown: 7.3.1
+  pointycastle: ^4.0.0
+  shared_preferences: ^2.5.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  import_lint: ^2.0.0
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
