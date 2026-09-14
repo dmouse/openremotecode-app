@@ -1,0 +1,676 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+
+import '../../../platform/remote_api.dart';
+import '../../auth/auth_repository.dart';
+import '../../chat/data/chat_repository.dart';
+import '../../chat/data/chat_pin_store.dart';
+import '../domain/pairing_review.dart';
+import '../domain/remote_connection.dart';
+import '../domain/connection_name.dart';
+import 'connections_repository.dart';
+import 'device_identity.dart';
+
+final class ApiConnectionsRepository
+    implements ConnectionsRepository, ConnectionsPresence, ChatRepository {
+  ApiConnectionsRepository(this.auth)
+    : scope = auth.session!.scope,
+      identities = DeviceIdentityStore(auth.store, auth.session!.scope),
+      pins = ChatPinStore(auth.store, auth.session!.scope);
+
+  final AuthRepository auth;
+  final String scope;
+  final DeviceIdentityStore identities;
+  final ChatPinStore pins;
+  Map<String, dynamic>? _record;
+  Future<Map<String, dynamic>>? _loadingDevice;
+  Map<String, dynamic>? _pending;
+  PairingReview? _pendingReview;
+  final _presence = StreamController<Map<String, ConnectionStatus>>.broadcast();
+  WebSocket? _socket;
+  StreamSubscription<dynamic>? _subscription;
+  Timer? _retry;
+  Timer? _handshake;
+  bool _active = false;
+  bool _disposed = false;
+  int _attempt = 0;
+  int _socketGeneration = 0;
+  final Map<String, ConnectionStatus> _statuses = {};
+  final _chatRequests = RelayRequests();
+  final _chatChanges = StreamController<void>.broadcast();
+  final _chatEvents = StreamController<ChatEvent>.broadcast();
+  final _capabilities = <String, Set<String>>{};
+  bool _relayReady = false;
+  Set<String> _inventoryTrusted = {};
+  @override
+  bool chatTrusted(String connectorId) =>
+      !_disposed &&
+      auth.session?.scope == scope &&
+      _inventoryTrusted.contains(connectorId);
+
+  @override
+  bool chatSupports(String connectorId, String operation) =>
+      chatTrusted(connectorId) &&
+      (_capabilities[connectorId]?.contains(operation) ?? false);
+
+  @override
+  Future<Set<String>> pinnedChatIds(
+    String connectorId,
+    String projectPath,
+  ) async {
+    _checkSession();
+    if (!chatTrusted(connectorId)) throw ChatFailure.denied;
+    final peer = _peer(connectorId);
+    final ids = await pins.read(connectorId, peer.keyId, projectPath);
+    _checkSession();
+    if (!chatTrusted(connectorId) || !_peer(connectorId).matches(peer)) {
+      throw ChatFailure.denied;
+    }
+    return ids;
+  }
+
+  @override
+  Future<Set<String>> setChatPinned(
+    String connectorId,
+    String projectPath,
+    String sessionId,
+    bool pinned,
+  ) async {
+    _checkSession();
+    if (!chatTrusted(connectorId)) throw ChatFailure.denied;
+    final peer = _peer(connectorId);
+    final ids = await pins.set(
+      connectorId,
+      peer.keyId,
+      projectPath,
+      sessionId,
+      pinned,
+    );
+    _checkSession();
+    if (!chatTrusted(connectorId) || !_peer(connectorId).matches(peer)) {
+      throw ChatFailure.denied;
+    }
+    return ids;
+  }
+
+  @override
+  Stream<void> get chatConnectionChanges => _chatChanges.stream;
+  @override
+  Stream<ChatEvent> get chatEvents => _chatEvents.stream;
+  @override
+  Object chatConnectionGeneration(String connectorId) =>
+      _chatRequests.generation(_peer(connectorId).keyId);
+  @override
+  bool chatOnline(String connectorId) =>
+      _active &&
+      !_disposed &&
+      _relayReady &&
+      _statuses[connectorId] == ConnectionStatus.online &&
+      chatTrusted(connectorId);
+
+  PublicIdentity _peer(String connectorId) {
+    final binding = requiredMap(requiredMap(_record!, 'bindings'), connectorId);
+    return PublicIdentity.parse(requiredMap(binding, 'identity'));
+  }
+
+  @override
+  Future<Map<String, dynamic>> chatRequest(
+    String connectorId,
+    String operation,
+    Map<String, dynamic> body,
+  ) async {
+    _checkSession();
+    if (!chatOnline(connectorId) || _socket == null) throw ChatFailure.offline;
+    if (!(_capabilities[connectorId]?.contains(operation) ?? false)) {
+      throw ChatFailure.unsupported;
+    }
+    final socket = _socket!;
+    final generation = chatConnectionGeneration(connectorId);
+    final peer = _peer(connectorId);
+    final result = await _chatRequests.request(
+      operation: operation,
+      body: body,
+      identity: requiredMap(_record!, 'identity'),
+      peer: peer,
+      send: (frame) {
+        _checkSession();
+        if (_socket != socket || !chatOnline(connectorId)) {
+          throw ChatFailure.offline;
+        }
+        socket.add(frame);
+      },
+    );
+    _checkSession();
+    if (!chatOnline(connectorId) ||
+        _socket != socket ||
+        generation != chatConnectionGeneration(connectorId) ||
+        !_peer(connectorId).matches(peer)) {
+      throw ChatFailure.offline;
+    }
+    return result;
+  }
+
+  Future<void> _receiveChat(
+    Map<String, dynamic> message,
+    WebSocket socket,
+  ) async {
+    try {
+      final id = trustedKeyIds.entries
+          .where((entry) => entry.value == message['senderKeyId'])
+          .firstOrNull
+          ?.key;
+      // A revoked peer may still have an already routed frame in flight.
+      if (id == null || !chatOnline(id) || _socket != socket) return;
+      final generation = chatConnectionGeneration(id);
+      final peer = _peer(id);
+      bool current() =>
+          _socket == socket &&
+          chatOnline(id) &&
+          generation == chatConnectionGeneration(id) &&
+          _peer(id).matches(peer);
+      await _chatRequests.receive(
+        message,
+        requiredMap(_record!, 'identity'),
+        peer,
+        isCurrent: current,
+        onEvent: (operation, requestId, body) {
+          if (!current() || !chatSupports(id, operation)) return;
+          _chatEvents.add(
+            ChatEvent(
+              connectorId: id,
+              generation: generation,
+              operation: operation,
+              requestId: requestId,
+              body: Map.unmodifiable(body),
+            ),
+          );
+        },
+      );
+    } catch (_) {
+      if (_socket == socket) await socket.close();
+    }
+  }
+
+  @override
+  Stream<Map<String, ConnectionStatus>> get presence => _presence.stream;
+
+  @override
+  void setActive(bool active) {
+    if (_disposed || _active == active) return;
+    _active = active;
+    _socketGeneration++;
+    _retry?.cancel();
+    _handshake?.cancel();
+    _subscription?.cancel();
+    _socket?.close();
+    _socket = null;
+    _relayReady = false;
+    _chatRequests.disconnect();
+    _capabilities.clear();
+    _statuses.clear();
+    _publishPresence();
+    if (active) unawaited(_connectPresence(_socketGeneration));
+  }
+
+  Future<void> _connectPresence(int generation) async {
+    try {
+      final socket = await openPresence();
+      if (!_active || _disposed || generation != _socketGeneration) {
+        await socket?.close();
+        return;
+      }
+      if (socket == null) return;
+      _socket = socket;
+      _handshake = Timer(const Duration(seconds: 10), () {
+        _schedulePresence(generation);
+      });
+      var ready = false;
+      _subscription = socket.listen(
+        (raw) {
+          try {
+            if (raw is! String || raw.length > 2 * 1024 * 1024) {
+              throw const FormatException();
+            }
+            final message = jsonDecode(raw) as Map<String, dynamic>;
+            if (message['protocolVersion'] != 1) throw const FormatException();
+            if (message['type'] == 'relay.ready') {
+              if (message['keyId'] != deviceKeyId ||
+                  message['role'] != 'client') {
+                throw const FormatException();
+              }
+              ready = true;
+              _relayReady = true;
+              _handshake?.cancel();
+              _attempt = 0;
+              _statuses.addEntries(
+                trustedKeyIds.keys.map(
+                  (id) => MapEntry(id, ConnectionStatus.offline),
+                ),
+              );
+            } else if (ready && message['type'] == 'connector.hello') {
+              final identity = PublicIdentity.parse(
+                requiredMap(message, 'identity'),
+              );
+              for (final entry in trustedKeyIds.entries) {
+                if (entry.value == identity.keyId) {
+                  _statuses[entry.key] = ConnectionStatus.online;
+                  final capabilities = message['capabilities'];
+                  if (capabilities is! List ||
+                      capabilities.length > 64 ||
+                      capabilities.any(
+                        (value) => value is! String || value.length > 64,
+                      )) {
+                    throw const FormatException();
+                  }
+                  _capabilities[entry.key] = capabilities
+                      .cast<String>()
+                      .toSet();
+                }
+              }
+            } else if (ready && message['type'] == 'relay.envelope') {
+              unawaited(_receiveChat(message, socket));
+              return;
+            } else if (ready && message['type'] == 'connector.offline') {
+              for (final entry in trustedKeyIds.entries) {
+                if (entry.value == message['keyId']) {
+                  _statuses[entry.key] = ConnectionStatus.offline;
+                  _chatRequests.disconnect(peerKeyId: entry.value);
+                }
+              }
+            }
+            _publishPresence();
+          } catch (_) {
+            unawaited(socket.close());
+          }
+        },
+        onError: (_) => _schedulePresence(generation),
+        onDone: () => _schedulePresence(generation),
+        cancelOnError: true,
+      );
+    } catch (_) {
+      _schedulePresence(generation);
+    }
+  }
+
+  void _schedulePresence(int generation) {
+    if (!_active ||
+        _disposed ||
+        generation != _socketGeneration ||
+        (_retry?.isActive ?? false)) {
+      return;
+    }
+    _socket?.close();
+    _handshake?.cancel();
+    _subscription?.cancel();
+    _socket = null;
+    _relayReady = false;
+    _chatRequests.disconnect();
+    _capabilities.clear();
+    _statuses.clear();
+    _publishPresence();
+    final delay = 1 << (_attempt++).clamp(0, 5);
+    _retry = Timer(
+      Duration(seconds: delay),
+      () => unawaited(_connectPresence(generation)),
+    );
+  }
+
+  void _publishPresence() {
+    if (!_disposed) {
+      _chatChanges.add(null);
+      _presence.add(
+        Map.unmodifiable({
+          for (final id in trustedKeyIds.keys)
+            id: _statuses[id] ?? ConnectionStatus.unknown,
+        }),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    setActive(false);
+    _disposed = true;
+    _presence.close();
+    _chatChanges.close();
+    _chatEvents.close();
+  }
+
+  void _checkSession() {
+    if (_disposed || auth.session?.scope != scope) {
+      throw ConnectionFailure.unauthorized;
+    }
+  }
+
+  Future<Map<String, dynamic>> _device() async {
+    _checkSession();
+    if (_record case final record?) return record;
+    final future = _loadingDevice ??= identities.loadOrCreate();
+    try {
+      final record = await future;
+      _checkSession();
+      return _record = record;
+    } finally {
+      _loadingDevice = null;
+    }
+  }
+
+  @override
+  Future<List<RemoteConnection>> listConnections() async {
+    try {
+      _checkSession();
+      final response = await auth.request('/v1/connectors');
+      final values = response.body['connectors'];
+      if (values is! List || values.length > 1000) {
+        throw const ApiException(0, 'invalid_response');
+      }
+      final record = await _device();
+      final bindings = requiredMap(record, 'bindings');
+      final connections = <RemoteConnection>[];
+      final trustedIds = <String>{};
+      for (final item in values) {
+        if (item is! Map<String, dynamic>) {
+          throw const ApiException(0, 'invalid_response');
+        }
+        final id = requiredString(item, 'id', max: 64);
+        final identity = PublicIdentity.parse(requiredMap(item, 'identity'));
+        final binding = bindings[id];
+        final trusted =
+            binding is Map<String, dynamic> &&
+            identity.matches(
+              PublicIdentity.parse(requiredMap(binding, 'identity')),
+            );
+        if (trusted) trustedIds.add(id);
+        connections.add(
+          RemoteConnection(
+            id: id,
+            name: requiredString(item, 'name', max: 64),
+            status: trusted
+                ? ConnectionStatus.unknown
+                : binding == null
+                ? ConnectionStatus.verificationRequired
+                : ConnectionStatus.identityChanged,
+          ),
+        );
+      }
+      _checkSession();
+      for (final id in _inventoryTrusted.difference(trustedIds)) {
+        final keyId = trustedKeyIds[id];
+        if (keyId != null) _chatRequests.disconnect(peerKeyId: keyId);
+      }
+      _inventoryTrusted = trustedIds;
+      _publishPresence();
+      return connections;
+    } catch (error) {
+      throw _failure(error);
+    }
+  }
+
+  @override
+  Future<void> revokeConnection(String connectorId) async {
+    _checkSession();
+    if (!RegExp(r'^[A-Za-z0-9_-]{1,64}$').hasMatch(connectorId)) {
+      throw const ApiException(0, 'invalid_request');
+    }
+    // Revoke first. A timeout is uncertain and must not pretend the connection
+    // was deleted. Owner retries are idempotent on the server.
+    await auth.request('/v1/connectors/$connectorId/revoke', method: 'POST');
+    _checkSession();
+    // Remote revocation takes effect even if local secure-store cleanup fails.
+    _inventoryTrusted.remove(connectorId);
+    final keyId = trustedKeyIds[connectorId];
+    if (keyId != null) _chatRequests.disconnect(peerKeyId: keyId);
+    _statuses.remove(connectorId);
+    _publishPresence();
+    final record = await _device();
+    final bindings = {...requiredMap(record, 'bindings')}..remove(connectorId);
+    final next = {...record, 'bindings': bindings};
+    await identities.save(next);
+    _checkSession();
+    _record = next;
+  }
+
+  @override
+  Future<String> renameConnection(String connectorId, String name) async {
+    _checkSession();
+    if (!RegExp(r'^[A-Za-z0-9_-]{1,64}$').hasMatch(connectorId)) {
+      throw const ApiException(0, 'invalid_request');
+    }
+    final response = await auth.request(
+      '/v1/connectors/$connectorId/rename',
+      method: 'POST',
+      body: {'name': ConnectionName.parse(name)},
+    );
+    _checkSession();
+    if (response.body['connectorId'] != connectorId) {
+      throw const ApiException(0, 'invalid_response');
+    }
+    return ConnectionName.parse(requiredString(response.body, 'name', max: 64));
+  }
+
+  @override
+  Future<PairingReview> reviewPairing(String code) async {
+    try {
+      _pending = null;
+      _pendingReview = null;
+      final record = await _device();
+      final identity = requiredMap(record, 'identity');
+      final challenge = await auth.request(
+        '/v1/devices/challenge',
+        method: 'POST',
+        body: {},
+      );
+      if (!requiredDate(challenge.body, 'expiresAt').isAfter(DateTime.now())) {
+        throw ConnectionFailure.expiredCode;
+      }
+      final proof = await compute(signDeviceChallenge, {
+        'identity': identity,
+        'challenge': requiredString(challenge.body, 'challenge', max: 43),
+      });
+      final claim = await auth.request(
+        '/v1/connector-pairings/claim',
+        method: 'POST',
+        body: {
+          'userCode': code,
+          'deviceName': 'Open Remote Code Mobile',
+          'identity': PublicIdentity.parse(identity).toJson(),
+          'proof': proof,
+        },
+      );
+      _checkSession();
+      final transcript = requiredMap(claim.body, 'transcript');
+      final pairingId = requiredString(claim.body, 'pairingId', max: 64);
+      if (pairingId != transcript['pairingId'] ||
+          !PublicIdentity.parse(identity).matches(
+            PublicIdentity.parse(requiredMap(transcript, 'deviceIdentity')),
+          )) {
+        throw ConnectionFailure.identityMismatch;
+      }
+      requiredString(claim.body, 'deviceId', max: 64);
+      final safety = await compute(pairingSafetyCode, transcript);
+      final review = PairingReview(
+        pairingId: pairingId,
+        safetyCode: safety,
+        expiresAt: requiredDate(claim.body, 'expiresAt'),
+      );
+      _pending = claim.body;
+      _pendingReview = review;
+      return review;
+    } catch (error) {
+      throw _failure(error);
+    }
+  }
+
+  @override
+  Future<RemoteConnection> confirmPairing(PairingReview review) async {
+    try {
+      _checkSession();
+      final pending = _pending;
+      if (!identical(review, _pendingReview) || pending == null) {
+        throw ConnectionFailure.identityMismatch;
+      }
+      if (!review.expiresAt.isAfter(DateTime.now())) {
+        throw ConnectionFailure.expiredCode;
+      }
+      final response = await auth.request(
+        '/v1/connector-pairings/${Uri.encodeComponent(review.pairingId)}/confirm',
+        method: 'POST',
+        body: {'deviceId': pending['deviceId']},
+      );
+      _checkSession();
+      final connectorId = requiredString(response.body, 'connectorId', max: 64);
+      if (response.body['deviceId'] != pending['deviceId']) {
+        throw ConnectionFailure.identityMismatch;
+      }
+      final credential = response.credential('device', auth.session!.server);
+      final record = await _device();
+      final connector = PublicIdentity.parse(
+        requiredMap(requiredMap(pending, 'transcript'), 'connectorIdentity'),
+      );
+      final bindings = {...requiredMap(record, 'bindings')};
+      final previous = bindings[connectorId];
+      if (previous is Map<String, dynamic> &&
+          !connector.matches(
+            PublicIdentity.parse(requiredMap(previous, 'identity')),
+          )) {
+        throw ConnectionFailure.identityMismatch;
+      }
+      bindings[connectorId] = {
+        'identity': connector.toJson(),
+        'deviceId': pending['deviceId'],
+      };
+      final next = {
+        ...record,
+        'bindings': bindings,
+        'deviceId': pending['deviceId'],
+        'deviceCookie': '${credential.name}=${credential.value}',
+        'deviceExpiresAt': credential.expires!.toUtc().toIso8601String(),
+      };
+      await identities.save(next);
+      _checkSession();
+      _record = next;
+      _pending = null;
+      _pendingReview = null;
+      if (_active) {
+        setActive(false);
+        setActive(true);
+      }
+      // Confirm establishes trust. Presence is learned separately from the relay.
+      final connections = await listConnections();
+      final matching = connections.where(
+        (connection) => connection.id == connectorId,
+      );
+      if (matching.isEmpty) throw const ApiException(0, 'invalid_response');
+      return matching.first;
+    } catch (error) {
+      throw _failure(error, confirming: true);
+    }
+  }
+
+  /// One admitted socket carries both presence and encrypted chat envelopes.
+  Future<WebSocket?> openPresence() async {
+    final record = await _device();
+    if (record['deviceCookie'] == null || record['deviceId'] == null) {
+      return null;
+    }
+    if (!requiredDate(record, 'deviceExpiresAt').isAfter(DateTime.now())) {
+      return null;
+    }
+    final response = await auth.request(
+      '/v1/relay/tickets',
+      method: 'POST',
+      body: {'deviceId': record['deviceId']},
+      cookie: requiredString(record, 'deviceCookie', max: 600),
+    );
+    _checkSession();
+    final path = requiredString(response.body, 'webSocketUrl');
+    if (!path.startsWith('/') ||
+        path.startsWith('//') ||
+        path.contains('?') ||
+        path.contains('#') ||
+        path.contains('\\')) {
+      throw const ApiException(0, 'invalid_response');
+    }
+    final server = auth.session!.server.uri;
+    final uri = server.replace(
+      scheme: server.scheme == 'https' ? 'wss' : 'ws',
+      path: path,
+    );
+    final ticket = requiredString(response.body, 'ticket');
+    if (!RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(ticket)) {
+      throw const ApiException(0, 'invalid_response');
+    }
+    final client = NoRedirectHttpClient();
+    try {
+      final socket = await WebSocket.connect(
+        uri.toString(),
+        protocols: ['opencode-remote.v1', 'ticket.$ticket'],
+        customClient: client,
+        maxPayloadLength: 2 * 1024 * 1024,
+        compression: CompressionOptions.compressionOff,
+      ).timeout(const Duration(seconds: 10));
+      client.close();
+      if (_disposed || auth.session?.scope != scope) {
+        await socket.close();
+        return null;
+      }
+      socket.pingInterval = const Duration(seconds: 25);
+      socket.add(
+        jsonEncode({
+          'protocolVersion': 1,
+          'type': 'client.hello',
+          'identity': PublicIdentity.parse(requiredMap(record, 'identity'))
+              .toJson(),
+        }),
+      );
+      return socket;
+    } catch (_) {
+      client.close(force: true);
+      rethrow;
+    }
+  }
+
+  Map<String, String> get trustedKeyIds {
+    final bindings = _record?['bindings'];
+    if (bindings is! Map<String, dynamic>) return {};
+    return bindings.map(
+      (id, raw) => MapEntry(
+        id,
+        PublicIdentity.parse(
+          requiredMap(raw as Map<String, dynamic>, 'identity'),
+        ).keyId,
+      ),
+    );
+  }
+
+  String? get deviceKeyId => _record == null
+      ? null
+      : PublicIdentity.parse(requiredMap(_record!, 'identity')).keyId;
+
+  Object _failure(Object error, {bool confirming = false}) {
+    if (error is ConnectionFailure) return error;
+    if (error is ApiException) {
+      if (error.status == 401) return ConnectionFailure.unauthorized;
+      if (error.status == 410) return ConnectionFailure.expiredCode;
+      if (error.status == 409) {
+        return confirming
+            ? ConnectionFailure.connectorNotReady
+            : ConnectionFailure.usedCode;
+      }
+      if (error.status == 400 || error.status == 404) {
+        return ConnectionFailure.invalidCode;
+      }
+      if (error.code == 'secure_storage') {
+        return ConnectionFailure.secureStorage;
+      }
+      if (error.code == 'network' || error.code == 'timeout') {
+        return ConnectionFailure.network;
+      }
+    }
+    return error;
+  }
+}

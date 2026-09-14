@@ -1,0 +1,24 @@
+{
+  "transcript": {
+    "version": 1,
+    "serviceId": "mobile-contract-test",
+    "pairingId": "pair_contract_test_0123456789",
+    "connectorIdentity": {
+      "version": 1,
+      "suite": "HPKE-Auth-P256-HKDF-SHA256-AES-256-GCM",
+      "keyId": "GE7YXickSTw7eTjhrCftFBD6sWFwF9EuCg8yMisU-PA",
+      "publicKey": "BEBseog8oKsOjBd5J5aFPdmVu6zYcev-7r6rrZI7d49i3Qq4RrZPgT5BDTXsVfxGnlIptfr1fLtYL_XdEgTKv_A"
+    },
+    "deviceIdentity": {
+      "version": 1,
+      "suite": "HPKE-Auth-P256-HKDF-SHA256-AES-256-GCM",
+      "keyId": "_EObE6Q32EI__A5cBUiIr_rkHzf3WYXUBvPI6TAY_6Y",
+      "publicKey": "BKA73upj3ErFO0SGkSu0pJfvQJOJnfhFR_4qPI0IuLiryRZrIG3SDiTQkAQ185sgy5VDziG6d_LW5HdHsSoui1o"
+    }
+  },
+  "safetyCode": "0665 CD9F AAE0 B77B F968 05CC",
+  "proof": {
+    "challenge": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "signature": "OkuET7OJdxw8SH7E-H18iTIuv6LhFzEriblteN3h-RnfAWiJqJMwgAbLBTUrz2Or_Ye9R32Xmxf5jhJdxMxu2Q"
+  }
+}
