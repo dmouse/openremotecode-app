@@ -68,7 +68,9 @@ jobs:
 
       - name: Build signed release APK
         working-directory: mobile
-        run: flutter build apk --release
+        env:
+          REMOTE_SERVER_URL: ${{ vars.REMOTE_SERVER_URL }}
+        run: flutter build apk --release --dart-define=REMOTE_SERVER_URL="$REMOTE_SERVER_URL"
 
       - name: Attach APK to release
         uses: softprops/action-gh-release@v2
