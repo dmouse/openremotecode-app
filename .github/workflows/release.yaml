@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Check out mobile
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: mobile
 
@@ -22,7 +22,7 @@ jobs:
       # this workflow's shared setup) expect ../packages to resolve the same
       # way it does in the original monorepo.
       - name: Check out packages (protocol fixtures)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: dmouse/openremotecode-plugin
           path: packages
