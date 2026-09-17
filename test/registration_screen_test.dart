@@ -186,6 +186,40 @@ void main() {
     expect(body['clientName'], 'Open Remote Code Mobile');
   });
 
+  testWidgets('production default server address stays unnamed', (
+    tester,
+  ) async {
+    final auth = fakeAuth();
+    addTearDown(auth.dispose);
+    await tester.pumpWidget(
+      MainApp(
+        serverSettingsRepository: MemoryServerSettingsRepository(
+          value: 'https://api.openremotecode.com',
+        ),
+        authRepository: auth,
+        connectionsRepositoryFactory: (_) => FakeConnectionsRepository(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openRegistration(tester);
+
+    expect(
+      find.text('Creating an account on https://api.openremotecode.com'),
+      findsNothing,
+    );
+    expect(find.text('No server configured'), findsNothing);
+  });
+
+  testWidgets('non-default server address is shown', (tester) async {
+    await pumpApp(tester);
+    await openRegistration(tester);
+
+    expect(
+      find.text('Creating an account on https://remote.example.com'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the new credential is offered to platform password managers', (
     tester,
   ) async {

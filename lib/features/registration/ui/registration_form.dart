@@ -64,6 +64,14 @@ class _RegistrationFormState extends State<RegistrationForm> {
     }
   }
 
+  /// Null when the server is the production default, alongside a real error
+  /// state: nothing useful to tell a normal user in either case.
+  String? get _serverStatusLabel {
+    if (!widget.hasServer) return 'No server configured';
+    final address = widget.viewModel.serverAddress;
+    return address == null ? null : 'Creating an account on $address';
+  }
+
   Future<void> _submitGoogle() async {
     if (widget.viewModel.isBusy) return;
     FocusScope.of(context).unfocus();
@@ -167,14 +175,14 @@ class _RegistrationFormState extends State<RegistrationForm> {
               isBusy: widget.viewModel.isBusy,
             ),
           ],
-          const SizedBox(height: 12),
-          Text(
-            widget.viewModel.serverAddress == null
-                ? 'No server configured'
-                : 'Creating an account on ${widget.viewModel.serverAddress}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12),
-          ),
+          if (_serverStatusLabel case final label?) ...[
+            const SizedBox(height: 12),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ],
           if (widget.viewModel.error case final error?) ...[
             const SizedBox(height: 16),
             InlineNotice(message: error, isError: true),

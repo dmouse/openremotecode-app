@@ -1,3 +1,4 @@
+import '../../app_config.dart';
 import '../auth/auth_repository.dart';
 import '../server_settings/server_settings_view_model.dart';
 
@@ -8,7 +9,18 @@ final class LoginViewModel {
   final ServerSettingsViewModel serverSettings;
   bool get isBusy => auth.isBusy;
   String? get error => auth.error;
-  String? get serverAddress => serverSettings.endpoint?.toString();
+
+  /// Null both when no server is configured and when it's the production
+  /// default, so the login screen doesn't call out the address a normal user
+  /// never had to think about.
+  String? get serverAddress {
+    final endpoint = serverSettings.endpoint;
+    if (endpoint == null ||
+        endpoint.uri.host == AppConfig.productionServerHost) {
+      return null;
+    }
+    return endpoint.toString();
+  }
 
   /// Offered only where the build can complete the flow and a server is selected,
   /// so the action never appears in a state where tapping it cannot work.

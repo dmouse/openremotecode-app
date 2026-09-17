@@ -230,6 +230,31 @@ void main() {
     );
   });
 
+  testWidgets('production default server address stays unnamed', (
+    tester,
+  ) async {
+    await mount(
+      tester,
+      MemoryServerSettingsRepository(value: 'https://api.openremotecode.com'),
+    );
+    expect(
+      find.text('Signing in to https://api.openremotecode.com'),
+      findsNothing,
+    );
+    expect(find.text('No server configured'), findsNothing);
+  });
+
+  testWidgets('non-default server address is shown', (tester) async {
+    await mount(
+      tester,
+      MemoryServerSettingsRepository(value: 'https://remote.example.com'),
+    );
+    expect(
+      find.text('Signing in to https://remote.example.com'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('credential fields are offered to platform password managers', (
     tester,
   ) async {

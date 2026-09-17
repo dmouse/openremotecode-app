@@ -7,6 +7,11 @@ abstract final class AppConfig {
     defaultValue: kDebugMode ? 'http://127.0.0.1:8080' : '',
   );
 
+  /// The planned hosted API/relay origin. Not a claim that it is deployed or
+  /// the build's default; used only to recognize it when a user has it
+  /// configured, so the login screen can stay quiet about it.
+  static const productionServerHost = 'api.openremotecode.com';
+
   /// The Google OAuth **web** client ID. Both mobile platforms request an ID token
   /// addressed to it, and the server verifies that same value as the audience, so
   /// this must match one entry in the server's `GOOGLE_OAUTH_AUDIENCES`. It is a
