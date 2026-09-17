@@ -499,10 +499,20 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   /// than this scope's -- matches the original single-class `refresh()`,
   /// which read the conversation snapshot under the same generation as the
   /// project-list fetch that preceded it.
+  ///
+  /// [resetHistory] should be true only for a refresh the user actually
+  /// asked for (the "Refresh" menu action, an authoritative reload). A
+  /// reconnect or background-resume driven refresh is not evidence the
+  /// chat's identity changed, so it should merge instead: forcing a reset
+  /// there used to collapse an already-loaded, possibly-long history down
+  /// to just the latest page on every reconnect, jumping the reader's
+  /// scroll position back to the bottom. `open`/`startNew`/trust loss reset
+  /// through their own explicit paths regardless of this flag.
   Future<void> reloadForProjectRefresh({
     required int generation,
     required bool Function() isValid,
-  }) => _readSnapshot(generation, resetHistory: true, isValid: isValid);
+    bool resetHistory = true,
+  }) => _readSnapshot(generation, resetHistory: resetHistory, isValid: isValid);
 
   /// Resets to a brand-new, unopened chat -- entering the conversation page
   /// with an empty draft rather than an existing session.

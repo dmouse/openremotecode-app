@@ -115,7 +115,11 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       // `conversation` (not just the coordinator) needs its own notification
       // to re-evaluate them.
       conversation.notifyExternalChange();
-      if (nowOnline && _active) unawaited(refresh());
+      // A reconnect is not a user-requested reload: merge in whatever
+      // changed instead of collapsing an already-loaded history down to the
+      // latest page, which would otherwise reset the reader's scroll
+      // position on every reconnect (including routine relay lease renewal).
+      if (nowOnline && _active) unawaited(refresh(resetHistory: false));
     });
   }
 
@@ -206,7 +210,9 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       _busyGate.mutating = false;
       _busyGate.reading = false;
     }
-    if (active && online) unawaited(refresh());
+    // Resuming from background is not a user-requested reload either -- see
+    // the connection listener above for why this merges instead of resetting.
+    if (active && online) unawaited(refresh(resetHistory: false));
     if (!_disposed) notifyListeners();
     // `active` (via `online`) is read through an injected closure by
     // canSend/canRename/canDeleteCurrentChat/etc., so a widget listening
@@ -218,7 +224,13 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
     _errorBox.value = describeChatFailure(failure);
   }
 
-  Future<void> refresh() => run(
+  /// [resetHistory] controls whether an already-open conversation's message
+  /// history is collapsed back to just the latest page (true, the default --
+  /// matches an explicit user-requested "Refresh") or merged in place (false
+  /// -- for a reconnect/background-resume driven call, which should not
+  /// disturb a reader's scroll position). See
+  /// [ConversationViewModel.reloadForProjectRefresh].
+  Future<void> refresh({bool resetHistory = true}) => run(
     (generation) async {
       await projects.fetchList();
       if (!valid(generation)) return;
@@ -240,6 +252,7 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
         await conversation.reloadForProjectRefresh(
           generation: generation,
           isValid: () => valid(generation),
+          resetHistory: resetHistory,
         );
       }
     },

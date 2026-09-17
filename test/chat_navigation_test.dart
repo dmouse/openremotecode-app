@@ -302,6 +302,42 @@ void main() {
   );
 
   testWidgets(
+    'reconnect-driven refresh merges history and preserves scroll position',
+    (tester) async {
+      final repository = _HistoryChats();
+      final model = await _showConversation(tester, repository);
+      repository.olderPages.add(
+        repository.historyPage(90, 100, cursor: 'next'),
+      );
+      await model.conversation.olderMessages();
+      expect(model.conversation.messages.length, 20);
+      final revision = model.conversation.messageHistoryRevision;
+      final list = find.descendant(
+        of: find.byType(ConversationView),
+        matching: find.byType(ListView),
+      );
+      final scroll = tester.widget<ListView>(list).controller!;
+      scroll.jumpTo(80);
+      await tester.pump();
+
+      // A relay lease renewal (or any other brief, routine reconnect) flips
+      // the connection off and back on -- this must not be treated like an
+      // explicit user-requested "Refresh".
+      repository.online = false;
+      repository.changes.add(null);
+      await tester.pumpAndSettle();
+      repository.online = true;
+      repository.changes.add(null);
+      await tester.pumpAndSettle();
+
+      expect(model.conversation.messages.length, 20);
+      expect(model.conversation.messageHistoryRevision, revision);
+      expect(scroll.offset, 80);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'non-progressing empty history is bounded even with unique cursors',
     (tester) async {
       final repository = _HistoryChats();
@@ -2080,6 +2116,8 @@ class _Chats implements ChatRepository {
       operation != 'chat.images' &&
       operation != 'chat.permissions' &&
       operation != 'chat.permission.reply' &&
+      operation != 'chat.questions' &&
+      operation != 'chat.question.reply' &&
       (operation != 'chat.delete' || deletionSupported) &&
       (operation != 'chat.prompt.mode' || promptModeSupported);
   @override
