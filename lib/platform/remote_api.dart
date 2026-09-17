@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../features/server_settings/domain/server_endpoint.dart';
+import 'access_tag.dart';
 
 final class ApiResponse {
   const ApiResponse(this.body, {this.cookies = const []});
@@ -112,6 +113,7 @@ final class HttpRemoteApi implements RemoteApi {
       request.followRedirects = false;
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+      request.headers.set(accessTagHeader, accessTagValue);
       if (accessToken != null) {
         request.headers.set(
           HttpHeaders.authorizationHeader,
