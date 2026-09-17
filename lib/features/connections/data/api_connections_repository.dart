@@ -771,6 +771,102 @@ final class ApiConnectionsRepository
     }
   }
 
+  /// Renew inside the final third of the credential's 365-day life. Expressed as remaining
+  /// time so it needs no issue timestamp and behaves the same for a record written before
+  /// rotation existed.
+  static const _deviceRenewalWindow = Duration(days: 120);
+  Future<void>? _deviceMaintenance;
+
+  /// Settles any rotation an earlier run left pending, then renews the device credential if
+  /// it is close enough to expiry. Never throws and never leaves the caller without a usable
+  /// credential: every failure path keeps whatever was last persisted.
+  void maintainDeviceCredential() {
+    _deviceMaintenance ??= _runDeviceMaintenance()
+        .catchError((_) {})
+        .whenComplete(() {
+          _deviceMaintenance = null;
+        });
+  }
+
+  Future<void> _runDeviceMaintenance() async {
+    var record = await _settlePendingDeviceCredential(await _device());
+    final cookie = record['deviceCookie'];
+    final deviceId = record['deviceId'];
+    if (cookie is! String || deviceId is! String) return;
+    final expires = requiredDate(record, 'deviceExpiresAt');
+    final now = DateTime.now();
+    // An expired credential has to re-pair; there is nothing left to renew with.
+    if (!expires.isAfter(now) ||
+        expires.difference(now) > _deviceRenewalWindow) {
+      return;
+    }
+    final rotated = await auth.request(
+      '/v1/devices/self/rotate',
+      method: 'POST',
+      body: {'deviceId': deviceId},
+      cookie: cookie,
+    );
+    _checkSession();
+    // The replacement arrives in the body, not as a cookie, so it cannot overwrite the
+    // credential still in use. It reuses the current cookie's name.
+    final credential = requiredString(rotated.body, 'credential');
+    final activateBy = requiredDate(rotated.body, 'activateBy');
+    final pending = '${cookie.split('=').first}=$credential';
+    // Durable before activation: activation retires the previous credential, so a process
+    // death between the two must not leave this one unrecorded.
+    record = {
+      ...record,
+      'pendingDeviceCookie': pending,
+      'pendingActivateBy': activateBy.toUtc().toIso8601String(),
+    };
+    await identities.save(record);
+    await _settlePendingDeviceCredential(record);
+  }
+
+  /// Resolves a credential this client recorded but may never have activated. Activation is
+  /// attempted first, because a rotation committed just before the app was killed leaves the
+  /// pending credential as the only working one.
+  Future<Map<String, dynamic>> _settlePendingDeviceCredential(
+    Map<String, dynamic> record,
+  ) async {
+    final pending = record['pendingDeviceCookie'];
+    final deviceId = record['deviceId'];
+    if (pending is! String || deviceId is! String) return record;
+    try {
+      final activated = await auth.request(
+        '/v1/devices/self/rotate/activate',
+        method: 'POST',
+        body: {'deviceId': deviceId},
+        cookie: pending,
+      );
+      _checkSession();
+      final promoted = {
+        ...record,
+        'deviceCookie': pending,
+        'deviceExpiresAt': requiredDate(
+          activated.body,
+          'credentialExpiresAt',
+        ).toUtc().toIso8601String(),
+      }..remove('pendingDeviceCookie');
+      promoted.remove('pendingActivateBy');
+      await identities.save(promoted);
+      return promoted;
+    } catch (_) {
+      // A failure here is ambiguous — rejected, or never delivered — and the server may
+      // still hold this credential as pending. Only its own deadline proves it worthless.
+      final deadline = DateTime.tryParse(
+        record['pendingActivateBy'] is String
+            ? record['pendingActivateBy'] as String
+            : '',
+      );
+      if (deadline == null || deadline.isAfter(DateTime.now())) return record;
+      final dropped = {...record}..remove('pendingDeviceCookie');
+      dropped.remove('pendingActivateBy');
+      await identities.save(dropped);
+      return dropped;
+    }
+  }
+
   /// One admitted socket carries both presence and encrypted chat envelopes.
   /// Returns the per-connection nonce alongside the socket -- rather than
   /// stashing it in shared instance state -- because a renewal opens a new
@@ -791,6 +887,10 @@ final class ApiConnectionsRepository
       cookie: requiredString(record, 'deviceCookie', max: 600),
     );
     _checkSession();
+    // Renewal runs only after admission has succeeded. Presenting the current credential
+    // cancels a pending rotation, so rotating before the ticket would cancel itself on
+    // every attempt and the credential would silently reach expiry.
+    maintainDeviceCredential();
     final path = requiredString(response.body, 'webSocketUrl');
     if (!path.startsWith('/') ||
         path.startsWith('//') ||

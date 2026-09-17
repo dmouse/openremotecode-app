@@ -72,17 +72,19 @@ final class DeviceIdentityStore {
     }
     if (existing != null) {
       final record = jsonDecode(existing) as Map<String, dynamic>;
-      if (record['version'] != 1 ||
+      // Version 1 predates device credential rotation and upgrades in place: it is simply
+      // a record with no pending credential, so an existing pairing survives the change.
+      if ((record['version'] != 1 && record['version'] != 2) ||
           record['scope'] != scope ||
           record['bindings'] is! Map<String, dynamic>) {
         throw const ApiException(0, 'secure_storage');
       }
       await compute(validateDeviceKey, requiredMap(record, 'identity'));
-      return record;
+      return {...record, 'version': 2};
     }
     final identity = await compute(generateDeviceKey, null);
     final record = <String, dynamic>{
-      'version': 1,
+      'version': 2,
       'scope': scope,
       'identity': identity,
       'bindings': <String, dynamic>{},
