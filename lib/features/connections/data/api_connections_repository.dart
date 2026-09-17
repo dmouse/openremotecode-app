@@ -8,6 +8,7 @@ import '../../../platform/remote_api.dart';
 import '../../auth/auth_repository.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/data/chat_pin_store.dart';
+import '../../chat/data/relay_crypto.dart';
 import '../domain/pairing_review.dart';
 import '../domain/remote_connection.dart';
 import '../domain/connection_name.dart';
@@ -34,6 +35,19 @@ final class ApiConnectionsRepository
   StreamSubscription<dynamic>? _subscription;
   Timer? _retry;
   Timer? _handshake;
+  // A relay admission's lease is capped at five minutes (see ADR 0014), so
+  // the connection is proactively replaced ahead of that expiry instead of
+  // waiting for the server to force-close it. `_renewal` is the pending
+  // renewal timer; `_renewingSocket`/`_renewingSubscription`/
+  // `_renewingHandshake` track the not-yet-live replacement connection, kept
+  // separate from `_socket`/`_subscription` so the current connection keeps
+  // serving requests until the replacement is confirmed ready.
+  Timer? _renewal;
+  WebSocket? _renewingSocket;
+  StreamSubscription<dynamic>? _renewingSubscription;
+  Timer? _renewingHandshake;
+  static const _renewalMargin = Duration(seconds: 45);
+  static const _minRenewalLeadTime = Duration(seconds: 5);
   bool _active = false;
   bool _disposed = false;
   int _attempt = 0;
@@ -204,6 +218,7 @@ final class ApiConnectionsRepository
     _socketGeneration++;
     _retry?.cancel();
     _handshake?.cancel();
+    _cancelRenewal();
     _subscription?.cancel();
     _socket?.close();
     _socket = null;
@@ -217,12 +232,14 @@ final class ApiConnectionsRepository
 
   Future<void> _connectPresence(int generation) async {
     try {
-      final socket = await openPresence();
+      final opened = await openPresence();
       if (!_active || _disposed || generation != _socketGeneration) {
-        await socket?.close();
+        await opened?.socket.close();
         return;
       }
-      if (socket == null) return;
+      if (opened == null) return;
+      final socket = opened.socket;
+      final nonce = opened.nonce;
       _socket = socket;
       _handshake = Timer(const Duration(seconds: 10), () {
         _schedulePresence(generation);
@@ -235,7 +252,9 @@ final class ApiConnectionsRepository
               throw const FormatException();
             }
             final message = jsonDecode(raw) as Map<String, dynamic>;
-            if (message['protocolVersion'] != 1) throw const FormatException();
+            if (message['protocolVersion'] != relayProtocolVersion) {
+              throw const FormatException();
+            }
             if (message['type'] == 'relay.ready') {
               if (message['keyId'] != deviceKeyId ||
                   message['role'] != 'client') {
@@ -250,49 +269,229 @@ final class ApiConnectionsRepository
                   (id) => MapEntry(id, ConnectionStatus.offline),
                 ),
               );
-            } else if (ready && message['type'] == 'connector.hello') {
-              final identity = PublicIdentity.parse(
-                requiredMap(message, 'identity'),
-              );
-              for (final entry in trustedKeyIds.entries) {
-                if (entry.value == identity.keyId) {
-                  _statuses[entry.key] = ConnectionStatus.online;
-                  final capabilities = message['capabilities'];
-                  if (capabilities is! List ||
-                      capabilities.length > 64 ||
-                      capabilities.any(
-                        (value) => value is! String || value.length > 64,
-                      )) {
-                    throw const FormatException();
-                  }
-                  _capabilities[entry.key] = capabilities
-                      .cast<String>()
-                      .toSet();
-                }
-              }
-            } else if (ready && message['type'] == 'relay.envelope') {
-              unawaited(_receiveChat(message, socket));
+              _scheduleRenewal(generation, message['authorizationExpiresAt']);
+              _publishPresence();
               return;
-            } else if (ready && message['type'] == 'connector.offline') {
-              for (final entry in trustedKeyIds.entries) {
-                if (entry.value == message['keyId']) {
-                  _statuses[entry.key] = ConnectionStatus.offline;
-                  _chatRequests.disconnect(peerKeyId: entry.value);
-                }
-              }
             }
-            _publishPresence();
+            _dispatchRelayMessage(socket, nonce, ready, message);
           } catch (_) {
             unawaited(socket.close());
           }
         },
-        onError: (_) => _schedulePresence(generation),
-        onDone: () => _schedulePresence(generation),
+        onError: (_) => _handleSocketClosed(generation, socket),
+        onDone: () => _handleSocketClosed(generation, socket),
         cancelOnError: true,
       );
     } catch (_) {
       _schedulePresence(generation);
     }
+  }
+
+  /// Dispatches every relay message type that a live connection can receive
+  /// once past its handshake -- shared between the normal connection
+  /// (`_connectPresence`) and a not-yet-swapped-in renewal candidate
+  /// (`_renew`) so both handle `connector.hello`/`relay.envelope`/
+  /// `connector.offline` identically.
+  void _dispatchRelayMessage(
+    WebSocket socket,
+    String nonce,
+    bool ready,
+    Map<String, dynamic> message,
+  ) {
+    if (ready && message['type'] == 'connector.hello') {
+      final identity = PublicIdentity.parse(requiredMap(message, 'identity'));
+      final connectorNonce = message['nonce'];
+      final clientKeyId = deviceKeyId;
+      if (connectorNonce is! String || clientKeyId == null) {
+        throw const FormatException();
+      }
+      for (final entry in trustedKeyIds.entries) {
+        if (entry.value == identity.keyId) {
+          _statuses[entry.key] = ConnectionStatus.online;
+          _chatRequests.connect(
+            peerKeyId: identity.keyId,
+            epoch: deriveRelayEpoch(
+              connectorKeyId: identity.keyId,
+              connectorNonce: connectorNonce,
+              clientKeyId: clientKeyId,
+              clientNonce: nonce,
+            ),
+          );
+          final capabilities = message['capabilities'];
+          if (capabilities is! List ||
+              capabilities.length > 64 ||
+              capabilities.any(
+                (value) => value is! String || value.length > 64,
+              )) {
+            throw const FormatException();
+          }
+          _capabilities[entry.key] = capabilities.cast<String>().toSet();
+        }
+      }
+    } else if (ready && message['type'] == 'relay.envelope') {
+      unawaited(_receiveChat(message, socket));
+      return;
+    } else if (ready && message['type'] == 'connector.offline') {
+      for (final entry in trustedKeyIds.entries) {
+        if (entry.value == message['keyId']) {
+          _statuses[entry.key] = ConnectionStatus.offline;
+          _chatRequests.disconnect(peerKeyId: entry.value);
+        }
+      }
+    }
+    _publishPresence();
+  }
+
+  /// A connection closing (error or done) is only ever significant for
+  /// whichever socket is actually live or being renewed right now. A
+  /// superseded renewal candidate that failed before going live leaves the
+  /// still-live connection untouched; an old connection this repository
+  /// itself just replaced via a completed renewal (see [_completeRenewal])
+  /// is no longer `_socket`, so its closing is expected and ignored here --
+  /// it must not re-enter the reactive reconnect path and flip presence
+  /// offline for what was actually a seamless renewal.
+  void _handleSocketClosed(int generation, WebSocket socket) {
+    if (identical(_renewingSocket, socket)) {
+      _renewingHandshake?.cancel();
+      _renewingHandshake = null;
+      _renewingSubscription = null;
+      _renewingSocket = null;
+      return;
+    }
+    if (!identical(_socket, socket)) return;
+    _schedulePresence(generation);
+  }
+
+  /// Schedules [_renew] ahead of [authorizationExpiresAt] (parsed from a
+  /// `relay.ready` message) by [_renewalMargin], so the connection is
+  /// replaced before the relay force-closes it at its five-minute lease
+  /// (see ADR 0014). A lease shorter than [_minRenewalLeadTime] past the
+  /// margin (e.g. capped by a near-expiry device credential) is left to the
+  /// existing reactive reconnect path instead of racing a renewal with no
+  /// useful lead time.
+  void _scheduleRenewal(int generation, Object? authorizationExpiresAt) {
+    _renewal?.cancel();
+    _renewal = null;
+    if (authorizationExpiresAt is! String) return;
+    final expiresAt = DateTime.tryParse(authorizationExpiresAt);
+    if (expiresAt == null) return;
+    final delay = expiresAt.difference(DateTime.now()) - _renewalMargin;
+    if (delay < _minRenewalLeadTime) return;
+    _renewal = Timer(delay, () => unawaited(_renew(generation)));
+  }
+
+  /// Opens a replacement connection while the current one is still live,
+  /// swapping over only once the replacement's own `relay.ready` confirms
+  /// the server has admitted it. The relay hub replaces the old
+  /// registration atomically the moment the new one registers (ADR 0014),
+  /// so presence never needs to flip offline for this.
+  Future<void> _renew(int generation) async {
+    if (!_active || _disposed || generation != _socketGeneration || _socket == null) {
+      return;
+    }
+    ({WebSocket socket, String nonce})? opened;
+    try {
+      opened = await openPresence();
+    } catch (_) {
+      opened = null;
+    }
+    if (opened == null) return;
+    if (!_active || _disposed || generation != _socketGeneration || _socket == null) {
+      unawaited(opened.socket.close());
+      return;
+    }
+    final socket = opened.socket;
+    final nonce = opened.nonce;
+    _renewingSocket = socket;
+    var ready = false;
+    _renewingHandshake = Timer(const Duration(seconds: 10), () {
+      _cleanupRenewalCandidate(socket);
+    });
+    late final StreamSubscription<dynamic> subscription;
+    subscription = socket.listen(
+      (raw) {
+        try {
+          if (raw is! String || raw.length > 2 * 1024 * 1024) {
+            throw const FormatException();
+          }
+          final message = jsonDecode(raw) as Map<String, dynamic>;
+          if (message['protocolVersion'] != relayProtocolVersion) {
+            throw const FormatException();
+          }
+          if (!ready) {
+            if (message['type'] != 'relay.ready' ||
+                message['keyId'] != deviceKeyId ||
+                message['role'] != 'client') {
+              throw const FormatException();
+            }
+            ready = true;
+            _renewingHandshake?.cancel();
+            _renewingHandshake = null;
+            _renewingSocket = null;
+            _renewingSubscription = null;
+            _completeRenewal(generation, socket, subscription, nonce, message);
+            return;
+          }
+          _dispatchRelayMessage(socket, nonce, true, message);
+        } catch (_) {
+          _cleanupRenewalCandidate(socket);
+        }
+      },
+      onError: (_) => _handleSocketClosed(generation, socket),
+      onDone: () => _handleSocketClosed(generation, socket),
+      cancelOnError: true,
+    );
+    _renewingSubscription = subscription;
+  }
+
+  void _cleanupRenewalCandidate(WebSocket socket) {
+    if (identical(_renewingSocket, socket)) {
+      _renewingHandshake?.cancel();
+      _renewingHandshake = null;
+      _renewingSubscription = null;
+      _renewingSocket = null;
+    }
+    unawaited(socket.close());
+  }
+
+  /// Swaps a confirmed-ready renewal candidate in as the live connection.
+  /// Deliberately does not touch `_statuses`/`_capabilities` or publish a
+  /// presence update: the connection never actually went offline, so there
+  /// is nothing to reset -- the hub replays each trusted connector's hello
+  /// to the new connection (ADR 0014), which reconfirms them shortly after.
+  void _completeRenewal(
+    int generation,
+    WebSocket socket,
+    StreamSubscription<dynamic> subscription,
+    String nonce,
+    Map<String, dynamic> readyMessage,
+  ) {
+    if (!_active || _disposed || generation != _socketGeneration) {
+      unawaited(subscription.cancel());
+      unawaited(socket.close());
+      return;
+    }
+    final previousSocket = _socket;
+    final previousSubscription = _subscription;
+    _socket = socket;
+    _subscription = subscription;
+    _relayReady = true;
+    _attempt = 0;
+    _scheduleRenewal(generation, readyMessage['authorizationExpiresAt']);
+    unawaited(previousSubscription?.cancel());
+    unawaited(previousSocket?.close());
+  }
+
+  void _cancelRenewal() {
+    _renewal?.cancel();
+    _renewal = null;
+    _renewingHandshake?.cancel();
+    _renewingHandshake = null;
+    unawaited(_renewingSubscription?.cancel());
+    _renewingSubscription = null;
+    final socket = _renewingSocket;
+    _renewingSocket = null;
+    unawaited(socket?.close());
   }
 
   void _schedulePresence(int generation) {
@@ -302,6 +501,7 @@ final class ApiConnectionsRepository
         (_retry?.isActive ?? false)) {
       return;
     }
+    _cancelRenewal();
     _socket?.close();
     _handshake?.cancel();
     _subscription?.cancel();
@@ -572,7 +772,11 @@ final class ApiConnectionsRepository
   }
 
   /// One admitted socket carries both presence and encrypted chat envelopes.
-  Future<WebSocket?> openPresence() async {
+  /// Returns the per-connection nonce alongside the socket -- rather than
+  /// stashing it in shared instance state -- because a renewal opens a new
+  /// connection while the current one is still live, so two nonces can be
+  /// in play at once (see [_renew]).
+  Future<({WebSocket socket, String nonce})?> openPresence() async {
     final record = await _device();
     if (record['deviceCookie'] == null || record['deviceId'] == null) {
       return null;
@@ -619,15 +823,18 @@ final class ApiConnectionsRepository
         return null;
       }
       socket.pingInterval = const Duration(seconds: 25);
+      // A nonce per connection; with the connector's it derives this epoch.
+      final nonce = relayNonce();
       socket.add(
         jsonEncode({
-          'protocolVersion': 1,
+          'protocolVersion': relayProtocolVersion,
           'type': 'client.hello',
           'identity': PublicIdentity.parse(requiredMap(record, 'identity'))
               .toJson(),
+          'nonce': nonce,
         }),
       );
-      return socket;
+      return (socket: socket, nonce: nonce);
     } catch (_) {
       client.close(force: true);
       rethrow;
