@@ -233,6 +233,48 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   String? get error => errorBox.value;
   String status = 'unknown';
   ChatPermission? permission;
+  ChatQuestion? question;
+
+  /// The id of the pending batch the composer is currently drafting a free-text
+  /// answer for, or null. Compared against [question]'s own id rather than cleared
+  /// eagerly, so it naturally stops applying the moment that batch is answered,
+  /// replaced or goes away -- the same "derive, don't chase every clear site" shape
+  /// [question] itself already relies on.
+  String? _answeringQuestionId;
+  int? _answeringQuestionIndex;
+  bool get answeringCustomQuestion =>
+      _answeringQuestionId != null && _answeringQuestionId == question?.id;
+
+  /// The index within the pending batch being drafted, when [answeringCustomQuestion].
+  int? get answeringQuestionIndex =>
+      answeringCustomQuestion ? _answeringQuestionIndex : null;
+
+  /// Answers staged so far for the pending batch, by index, in the wire shape
+  /// (`{'selected': [...]}` or `{'text': ...}`) -- keyed to [question]'s own id so a
+  /// new or replaced batch never inherits a previous one's drafts. Nothing is sent to
+  /// OpenCode until every entry is non-null; see [_submitQuestionIfComplete].
+  String? _stagedBatchId;
+  final List<Map<String, dynamic>?> _staged = [];
+
+  void _ensureStaged(ChatQuestion pending) {
+    if (_stagedBatchId == pending.id) return;
+    _stagedBatchId = pending.id;
+    _staged
+      ..clear()
+      ..addAll(List<Map<String, dynamic>?>.filled(pending.questions.length, null));
+  }
+
+  /// The option indices already staged for question [index] of the pending batch, or
+  /// null if that question has no staged answer (including one staged as free text,
+  /// which has no option indices to show as selected).
+  List<int>? stagedSelection(int index) {
+    final pending = question;
+    if (pending == null) return null;
+    _ensureStaged(pending);
+    if (index < 0 || index >= _staged.length) return null;
+    final selected = _staged[index]?['selected'];
+    return selected is List<int> ? selected : null;
+  }
 
   /// OpenCode's own task list for this chat, in its order. Read-only -- the
   /// agent writes it; this app only counts and shows it. See CHAT-TODOS.md.
@@ -485,6 +527,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     _clearMessages();
     status = 'unknown';
     permission = null;
+    question = null;
     // A model choice belongs to the chat it was made in -- carrying it over
     // into a different chat would silently redirect that chat's prompts too.
     // The snapshot below recovers this chat's own last-used model, if any.
@@ -532,6 +575,8 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
           'includeImages': true,
         if (repository.chatSupports(connectorId, 'chat.permissions'))
           'includePermissions': true,
+        if (repository.chatSupports(connectorId, 'chat.questions'))
+          'includeQuestions': true,
         if (supportsTodos) 'includeTodos': true,
       },
     );
@@ -553,6 +598,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     chat = summary;
     status = response['status'] as String;
     permission = parsePermission(response);
+    question = parseQuestion(response);
     todos = parseTodos(response) ?? const [];
     _syncTodosHidden();
     // Only the unpaginated (latest) fetch's `model` reliably reflects what
@@ -600,6 +646,8 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
           'includeImages': true,
         if (repository.chatSupports(connectorId, 'chat.permissions'))
           'includePermissions': true,
+        if (repository.chatSupports(connectorId, 'chat.questions'))
+          'includeQuestions': true,
         if (supportsTodos) 'includeTodos': true,
       });
       _schedulePoll();
@@ -631,6 +679,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     chat = summary;
     status = response['status'] as String;
     permission = parsePermission(response);
+    question = parseQuestion(response);
     todos = parseTodos(response) ?? const [];
     _syncTodosHidden();
     messages = {
@@ -788,6 +837,166 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   bool get supportsPermissionReply =>
       repository.chatSupports(connectorId, 'chat.permission.reply');
 
+  bool get supportsQuestionReply =>
+      repository.chatSupports(connectorId, 'chat.question.reply');
+
+  /// Stages an answer of selected option indices for question [index] of the pending
+  /// batch. Once every question in the batch has a staged answer, submits the whole
+  /// batch in one `chat.question.reply` -- with a single-question batch this
+  /// reproduces the original "tap Answer -> sends immediately" behavior exactly.
+  /// Free text instead goes through [answerQuestionAtWithText]; rejecting the whole
+  /// batch goes through [rejectQuestion].
+  Future<void> answerQuestionAt(int index, List<int> selected) {
+    final pending = question;
+    if (pending == null ||
+        !supportsQuestionReply ||
+        index < 0 ||
+        index >= pending.questions.length) {
+      return Future.value();
+    }
+    final options = pending.questions[index].options;
+    final valid_ = selected
+        .where((optionIndex) => optionIndex >= 0 && optionIndex < options.length)
+        .toSet()
+        .toList(growable: false)
+      ..sort();
+    if (valid_.isEmpty) return Future.value();
+    _ensureStaged(pending);
+    _staged[index] = {'selected': valid_};
+    notifyListeners();
+    return _submitQuestionIfComplete();
+  }
+
+  /// Rejects the whole pending batch, from any page. OpenCode's own reject has no
+  /// per-question form, so there is no way to decline part of a batch while answering
+  /// the rest -- replaces the old "empty selection" reject path.
+  Future<void> rejectQuestion() => run(
+    (generation) async {
+      final pending = question;
+      final selectedProject = project();
+      if (chat == null ||
+          pending == null ||
+          !supportsQuestionReply ||
+          selectedProject == null) {
+        return;
+      }
+      // Optimistic for the same reason as a permission reply: a stale prompt asking
+      // about an already-answered batch is worse than a brief gap.
+      question = null;
+      _answeringQuestionId = null;
+      _answeringQuestionIndex = null;
+      _stagedBatchId = null;
+      _staged.clear();
+      notifyListeners();
+      await _request('chat.question.reply', {
+        'projectId': selectedProject.id,
+        'sessionId': chat!.id,
+        'questionId': pending.id,
+        'response': 'reject',
+      });
+      if (valid(generation)) await _readSnapshot(generation);
+    },
+    mutation: true,
+    onFailure: _handleFailure,
+    onAfterSuccess: schedulePollIfNeeded,
+    onAfterStale: scheduleRefreshIfOnline,
+  );
+
+  /// Switches the composer into drafting a free-text answer to question [index] of the
+  /// pending batch, mirroring OpenCode's own TUI "type your own answer" affordance --
+  /// only offered when that question's own [ChatQuestionPrompt.custom] flag allows it.
+  /// See ADR 0011.
+  void startQuestionCustomAnswer(int index) {
+    final pending = question;
+    if (pending == null ||
+        index < 0 ||
+        index >= pending.questions.length ||
+        !pending.questions[index].custom ||
+        !supportsQuestionReply) {
+      return;
+    }
+    _answeringQuestionId = pending.id;
+    _answeringQuestionIndex = index;
+    notifyListeners();
+  }
+
+  /// Leaves free-text drafting and returns to the option list, without answering.
+  void cancelQuestionCustomAnswer() {
+    if (_answeringQuestionId == null) return;
+    _answeringQuestionId = null;
+    _answeringQuestionIndex = null;
+    notifyListeners();
+  }
+
+  /// Stages [text] as question [index]'s answer, the same way [answerQuestionAt]
+  /// stages an option selection -- see there for the batch-completion/auto-submit
+  /// rule. The text is forwarded as-typed, the same way a normal chat message already
+  /// forwards free text -- see ADR 0011. Returns whether it was actually staged, the
+  /// same "safe to clear the draft" signal [send] returns, so the composer can share
+  /// its own clear-on-success handling.
+  Future<bool> answerQuestionAtWithText(int index, String text) async {
+    final pending = question;
+    final trimmed = text.trim();
+    if (pending == null ||
+        !supportsQuestionReply ||
+        index < 0 ||
+        index >= pending.questions.length ||
+        !pending.questions[index].custom ||
+        trimmed.isEmpty) {
+      return false;
+    }
+    _ensureStaged(pending);
+    _staged[index] = {
+      'text': trimmed.length > 2000 ? trimmed.substring(0, 2000) : trimmed,
+    };
+    _answeringQuestionId = null;
+    _answeringQuestionIndex = null;
+    notifyListeners();
+    await _submitQuestionIfComplete();
+    return true;
+  }
+
+  /// Sends the whole pending batch's staged answers, in order, once every question has
+  /// one -- the single place [answerQuestionAt]/[answerQuestionAtWithText]'s "auto-
+  /// submit on completion" rule lives.
+  Future<void> _submitQuestionIfComplete() => run(
+    (generation) async {
+      final pending = question;
+      final selectedProject = project();
+      if (chat == null ||
+          pending == null ||
+          !supportsQuestionReply ||
+          selectedProject == null) {
+        return;
+      }
+      _ensureStaged(pending);
+      if (_staged.any((answer) => answer == null)) return;
+      final answers = List<Map<String, dynamic>>.from(
+        _staged.cast<Map<String, dynamic>>(),
+      );
+      // Optimistic for the same reason as a permission reply: a stale prompt asking
+      // about an already-answered batch is worse than a brief gap.
+      question = null;
+      _answeringQuestionId = null;
+      _answeringQuestionIndex = null;
+      _stagedBatchId = null;
+      _staged.clear();
+      notifyListeners();
+      await _request('chat.question.reply', {
+        'projectId': selectedProject.id,
+        'sessionId': chat!.id,
+        'questionId': pending.id,
+        'response': 'answer',
+        'answers': answers,
+      });
+      if (valid(generation)) await _readSnapshot(generation);
+    },
+    mutation: true,
+    onFailure: _handleFailure,
+    onAfterSuccess: schedulePollIfNeeded,
+    onAfterStale: scheduleRefreshIfOnline,
+  );
+
   /// [response] is `'once'` or `'reject'` only -- never a persistent
   /// `'always'` grant. See CHAT-PERMISSIONS.md.
   Future<void> respondToPermission(String response) => run(
@@ -914,6 +1123,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
         _clearMessages();
         status = 'unknown';
         permission = null;
+        question = null;
         notifyListeners();
         await _readSnapshot(generation);
       },
@@ -947,6 +1157,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
         chat = null;
         status = 'unknown';
         permission = null;
+        question = null;
         _clearMessages();
       },
     );

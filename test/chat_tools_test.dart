@@ -82,6 +82,25 @@ void main() {
     },
   );
 
+  test('a question tool call parses with a description and no shell sub-object', () {
+    final tool = ChatTool.parse({
+      'operation': 'question',
+      'status': 'completed',
+      'description': 'Environment: Local · Platform: Android',
+    });
+    expect(tool.operation, 'question');
+    expect(tool.description, 'Environment: Local · Platform: Android');
+    expect(tool.shell, isNull);
+    expect(
+      () => ChatTool.parse({
+        'operation': 'question',
+        'status': 'completed',
+        'shell': {'command': '', 'output': '', 'truncated': false},
+      }),
+      throwsFormatException,
+    );
+  });
+
   for (final scale in [1.0, 2.0]) {
     testWidgets(
       'shell toggle hides command/output and survives updates at scale $scale',
@@ -577,6 +596,7 @@ void main() {
                   'list',
                   'execute',
                   'fetch',
+                  'question',
                 ])
                   ToolView(
                     tool: ChatTool(
@@ -606,9 +626,10 @@ void main() {
           ),
         ),
       );
-      expect(find.text('target'), findsNWidgets(7));
+      expect(find.text('target'), findsNWidgets(8));
       expect(find.text('Capture screen'), findsOneWidget);
       expect(find.byIcon(Icons.settings_outlined), findsNWidgets(2));
+      expect(find.byIcon(Icons.help_outline), findsOneWidget);
       for (final label in [
         'Read',
         'Edit',
@@ -618,10 +639,12 @@ void main() {
         'Run',
         'Fetch',
         'Tool',
+        'Question',
       ]) {
         expect(find.text(label), findsNothing);
       }
       expect(find.bySemanticsLabel('Read target. Completed'), findsOneWidget);
+      expect(find.bySemanticsLabel('Question target. Completed'), findsOneWidget);
       expect(find.bySemanticsLabel('Tool. Completed'), findsOneWidget);
       expect(
         find.bySemanticsLabel('Tool Capture screen. Completed'),

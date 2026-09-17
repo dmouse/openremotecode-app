@@ -35,6 +35,7 @@ class ChatComposerBar extends StatelessWidget {
       builder: (context, _) {
         final focused = composerFocus.hasFocus;
         final showModelButton = draft.text.isEmpty || !focused;
+        final answeringQuestion = model.answeringCustomQuestion;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -58,6 +59,7 @@ class ChatComposerBar extends StatelessWidget {
                       horizontal: 16,
                       vertical: 12,
                     ),
+                    hintText: answeringQuestion ? 'Type your answer...' : null,
                     counterText: '',
                     // Only reserved when shown, so it never adds space of
                     // its own -- and it hides while the user is actively
@@ -91,6 +93,8 @@ class ChatComposerBar extends StatelessWidget {
                 final mode = model.promptMode;
                 final label = model.isSending
                     ? 'Sending'
+                    : answeringQuestion
+                    ? 'Answer'
                     : switch (mode) {
                         PromptMode.build => 'Send · Build',
                         PromptMode.plan => 'Send · Plan',
@@ -131,7 +135,13 @@ class ChatComposerBar extends StatelessWidget {
                               model.canSend && value.text.trim().isNotEmpty
                               ? () async {
                                   final text = draft.text;
-                                  if (await model.send(text) &&
+                                  final accepted = answeringQuestion
+                                      ? await model.answerQuestionAtWithText(
+                                          model.answeringQuestionIndex!,
+                                          text,
+                                        )
+                                      : await model.send(text);
+                                  if (accepted &&
                                       context.mounted &&
                                       draft.text == text) {
                                     draft.clear();

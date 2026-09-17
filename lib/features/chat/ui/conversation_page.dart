@@ -4,6 +4,7 @@ import '../conversation_view_model.dart';
 import '../domain/chat_models.dart';
 import 'conversation_view.dart';
 import 'permission_banner.dart';
+import 'question_banner.dart';
 import 'todo_banner.dart';
 
 /// The conversation page's body: the message list with its floating task
@@ -15,12 +16,17 @@ class ConversationPage extends StatelessWidget {
     required this.isSubtask,
     required this.onOpenSubtask,
     required this.onOpenTodoBanner,
+    this.onTypeOwnAnswer,
   });
 
   final ConversationViewModel model;
   final bool isSubtask;
   final ValueChanged<ChatSubtask>? onOpenSubtask;
   final VoidCallback onOpenTodoBanner;
+
+  /// Raised when the question banner switches into free-text drafting, so the
+  /// composer can be focused. See [QuestionBanner.onTypeOwnAnswer].
+  final VoidCallback? onTypeOwnAnswer;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -58,6 +64,7 @@ class ConversationPage extends StatelessWidget {
           ),
         ),
       if (!isSubtask) PermissionBanner(model: model),
+      if (!isSubtask) QuestionBanner(model: model, onTypeOwnAnswer: onTypeOwnAnswer),
     ],
   );
 }

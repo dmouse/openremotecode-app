@@ -470,6 +470,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
                           ? _openSubtask
                           : null,
                       onOpenTodoBanner: _openTodoBanner,
+                      onTypeOwnAnswer: _composerFocus.requestFocus,
                     ),
                   },
                 ),

@@ -267,6 +267,7 @@ const _chatOperations = [
   'execute',
   'fetch',
   'tool',
+  'question',
 ];
 
 final class ChatTool {
@@ -472,6 +473,112 @@ final class ChatPermission {
   }
 }
 
+/// One choice OpenCode prepared for a pending question. The label and description are
+/// authored by the model, so they are bounded and sanitized before they reach here; the
+/// app renders them as plain text and never as markup. See ADR 0011.
+final class ChatQuestionOption {
+  const ChatQuestionOption({required this.label, this.description});
+  final String label;
+  final String? description;
+
+  factory ChatQuestionOption.parse(Map<String, dynamic> value) {
+    final label = value['label'];
+    final description = value['description'];
+    if (label is! String ||
+        label.isEmpty ||
+        label.length > 80 ||
+        (value.containsKey('description') &&
+            (description is! String || description.length > 256)) ||
+        value.keys.any((key) => !['label', 'description'].contains(key))) {
+      throw const FormatException();
+    }
+    return ChatQuestionOption(label: label, description: description as String?);
+  }
+}
+
+/// One question within a pending batch. The answer is a set of indices into [options],
+/// or -- only when [custom] allows it -- free text the user typed, mirroring OpenCode's
+/// own TUI "type your own answer" affordance. See ADR 0011.
+final class ChatQuestionPrompt {
+  const ChatQuestionPrompt({
+    required this.header,
+    required this.question,
+    required this.options,
+    required this.multiple,
+    required this.custom,
+  });
+  final String header, question;
+  final List<ChatQuestionOption> options;
+  final bool multiple, custom;
+
+  factory ChatQuestionPrompt.parse(Map<String, dynamic> value) {
+    final header = value['header'];
+    final question = value['question'];
+    final options = value['options'];
+    if (header is! String ||
+        header.length > 64 ||
+        question is! String ||
+        question.isEmpty ||
+        question.length > 2000 ||
+        value['multiple'] is! bool ||
+        value['custom'] is! bool ||
+        options is! List ||
+        options.isEmpty ||
+        options.length > 32 ||
+        value.keys.any(
+          (key) => [
+            'header',
+            'question',
+            'options',
+            'multiple',
+            'custom',
+          ].contains(key) == false,
+        )) {
+      throw const FormatException();
+    }
+    return ChatQuestionPrompt(
+      header: header,
+      question: question,
+      options: options
+          .map(
+            (option) => ChatQuestionOption.parse(option as Map<String, dynamic>),
+          )
+          .toList(growable: false),
+      multiple: value['multiple'] as bool,
+      custom: value['custom'] as bool,
+    );
+  }
+}
+
+/// A batch of one or more questions OpenCode is blocked on, all sharing one [id] and
+/// answered together: OpenCode's own `question` tool can ask several at once, and its
+/// reply endpoint has no per-question form, so a batch is always answered or rejected as
+/// a whole. See ADR 0011 and CHAT-QUESTIONS.md.
+final class ChatQuestion {
+  const ChatQuestion({required this.id, required this.questions});
+  final String id;
+  final List<ChatQuestionPrompt> questions;
+
+  factory ChatQuestion.parse(Map<String, dynamic> value) {
+    final questions = value['questions'];
+    if (questions is! List ||
+        questions.isEmpty ||
+        questions.length > 8 ||
+        value.keys.any((key) => !['id', 'questions'].contains(key))) {
+      throw const FormatException();
+    }
+    return ChatQuestion(
+      id: requiredString(value, 'id', max: 128),
+      questions: questions
+          .map(
+            (prompt) =>
+                ChatQuestionPrompt.parse(prompt as Map<String, dynamic>),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
 /// One entry of OpenCode's own task list for the session, as the agent's
 /// task-list tool last wrote it. Read-only: this app never adds, reorders,
 /// completes, or clears a task -- the agent owns its list. See CHAT-TODOS.md.
@@ -546,3 +653,8 @@ ChatPermission? parsePermission(Map<String, dynamic> value) =>
     value['permission'] == null
     ? null
     : ChatPermission.parse(requiredMap(value, 'permission'));
+
+ChatQuestion? parseQuestion(Map<String, dynamic> value) =>
+    value['question'] == null
+    ? null
+    : ChatQuestion.parse(requiredMap(value, 'question'));

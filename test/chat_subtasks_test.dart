@@ -440,6 +440,8 @@ class _Repository implements ChatRepository {
       operation != 'chat.images' &&
       operation != 'chat.permissions' &&
       operation != 'chat.permission.reply' &&
+      operation != 'chat.questions' &&
+      operation != 'chat.question.reply' &&
       (operation != 'chat.subtask.snapshot' || supports);
   @override
   Stream<void> get chatConnectionChanges => changes.stream;

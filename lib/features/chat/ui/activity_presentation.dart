@@ -26,6 +26,7 @@ abstract final class ActivityPresentation {
     'fetch' => ('Fetch', Icons.language),
     'update_tasks' => ('Update task list', Icons.checklist),
     'subtask' => ('Subtask', Icons.account_tree_outlined),
+    'question' => ('Question', Icons.help_outline),
     _ => ('Tool', Icons.settings_outlined),
   };
   static String preview(String? description, String fallback) {

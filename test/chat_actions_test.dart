@@ -2332,6 +2332,8 @@ final class _Actions implements ChatRepository {
       operation != 'chat.images' &&
       operation != 'chat.permissions' &&
       operation != 'chat.permission.reply' &&
+      operation != 'chat.questions' &&
+      operation != 'chat.question.reply' &&
       !unsupported.contains(operation);
   @override
   Future<Set<String>> pinnedChatIds(
