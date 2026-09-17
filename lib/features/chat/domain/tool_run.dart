@@ -150,6 +150,14 @@ List<ChatMessage> visibleMessages(Iterable<ChatMessage> messages) => messages
     )
     .toList();
 
+/// Ids of the user's own prompts, oldest first, filtered through
+/// [visibleMessages] so a tick-bar-style index only ever points at a message
+/// that actually has a rendered row (and therefore an anchor) to scroll to.
+List<String> userMessageIds(Iterable<ChatMessage> messages) => [
+  for (final message in visibleMessages(messages))
+    if (message.role == 'user') message.id,
+];
+
 /// Index ranges (inclusive, oldest-first) of maximal runs of two or more
 /// consecutive [isPureToolMessage] messages in [messages].
 List<(int, int)> pureToolMessageRuns(List<ChatMessage> messages) {
