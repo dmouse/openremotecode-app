@@ -27,16 +27,6 @@ class LoginHeader extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 44),
-      Container(
-        width: 72,
-        height: 72,
-        decoration: BoxDecoration(
-          color: AppTheme.lime,
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: const Icon(Icons.devices_rounded, size: 34, color: AppTheme.ink),
-      ),
-      const SizedBox(height: 24),
       Text(
         'Your workspace.\nWithin reach.',
         style: Theme.of(context).textTheme.headlineLarge,
