@@ -76,12 +76,18 @@ final class RelayRequests {
   RelayRequests({this.crypto = const NativeRelayCrypto()});
   final RelayCrypto crypto;
   final _pending = <String, _Pending>{};
-  final _seen = <String, int>{};
-  int _sequence = 0;
+  final _epochs = <String, _Epoch>{};
   final _generations = <String, Object>{};
   int _opening = 0;
   Object generation(String peerKeyId) =>
       _generations.putIfAbsent(peerKeyId, Object.new);
+
+  /// Binds a peer to the epoch its hello just established. Sequence numbers and
+  /// the replay window restart with it, so envelopes from any earlier
+  /// connection no longer decrypt and cannot be replayed into this one.
+  void connect({required String peerKeyId, required String epoch}) {
+    _epochs[peerKeyId] = _Epoch(epoch);
+  }
 
   Future<Map<String, dynamic>> request({
     required String operation,
@@ -91,6 +97,8 @@ final class RelayRequests {
     required void Function(String) send,
   }) async {
     if (_pending.length >= 4) throw ChatFailure.busy;
+    final epoch = _epochs[peer.keyId];
+    if (epoch == null) throw ChatFailure.unavailable;
     final id = requestId();
     final entry = _Pending(peer.keyId, operation);
     _pending[id] = entry;
@@ -105,13 +113,13 @@ final class RelayRequests {
     unawaited(() async {
       try {
         final envelope = await crypto.seal(identity, peer, {
-          'protocolVersion': 1,
+          'protocolVersion': relayProtocolVersion,
           'kind': 'request',
           'requestId': id,
           'sentAt': DateTime.now().millisecondsSinceEpoch,
           'operation': operation,
           'body': {'version': 1, ...body},
-        }, _sequence++);
+        }, epoch.epoch, epoch.sequence++);
         if (generation != _generations[peer.keyId] ||
             entry.completer.isCompleted ||
             _pending[id] != entry) {
@@ -144,27 +152,24 @@ final class RelayRequests {
     onEvent,
   }) async {
     if (_opening >= 4) throw ChatFailure.busy;
-    validateEnvelope(envelope, own['keyId'] as String, peer.keyId);
-    final now = DateTime.now().millisecondsSinceEpoch;
-    _seen.removeWhere((_, expiry) => expiry <= now);
-    final messageId = '${peer.keyId}:${envelope['messageId']}';
-    if (_seen.containsKey(messageId)) return;
-    if (_seen.length >= 2048) throw ChatFailure.busy;
+    final epoch = _epochs[peer.keyId];
+    if (epoch == null) return;
+    validateEnvelope(envelope, own['keyId'] as String, peer.keyId, epoch.epoch);
+    final sequence = envelope['sequence'];
+    // Consumed before decrypting, so a replay is refused whatever it contains.
+    if (sequence is! int || !epoch.window.accept(sequence)) return;
     _opening++;
     final generation = this.generation(peer.keyId);
     try {
-      final payload = await crypto.open(own, peer, envelope);
+      final payload = await crypto.open(own, peer, envelope, epoch.epoch);
       if (generation != _generations[peer.keyId] ||
           isCurrent?.call() == false ||
-          _seen.containsKey(messageId)) {
+          _epochs[peer.keyId] != epoch) {
         return;
       }
-      _seen[messageId] = envelope['expiresAt'] as int;
       // Events never resolve requests, even when their correlation IDs collide.
       if (payload['kind'] == 'event') {
-        if (payload['operation'] == 'project.mcp.updated' ||
-            payload['operation'] == 'chat.stream.updated' ||
-            payload['operation'] == 'chat.stream.closed') {
+        if (connectorEventOperations.contains(payload['operation'])) {
           onEvent?.call(
             payload['operation'] as String,
             payload['requestId'] as String,
@@ -212,8 +217,10 @@ final class RelayRequests {
     // Retire only this peer's lifetime unless the entire socket is closing.
     if (peerKeyId == null) {
       _generations.clear();
+      _epochs.clear();
     } else {
       _generations.remove(peerKeyId);
+      _epochs.remove(peerKeyId);
     }
     _pending.removeWhere((_, entry) {
       if (peerKeyId != null && entry.peer != peerKeyId) return false;
@@ -237,6 +244,13 @@ final class RelayRequests {
     'chat.rename',
     'chat.fork',
   ].contains(operation);
+}
+
+final class _Epoch {
+  _Epoch(this.epoch);
+  final String epoch;
+  final window = ReplayWindow();
+  int sequence = 0;
 }
 
 final class _Pending {

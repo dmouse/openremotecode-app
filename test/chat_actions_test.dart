@@ -60,7 +60,7 @@ void main() {
       'relay transports shared $operation body and response unchanged',
       () async {
         final crypto = _WireCrypto();
-        final relay = RelayRequests(crypto: crypto);
+        final relay = _connected(crypto);
         addTearDown(relay.disconnect);
         final sent = Completer<void>();
         final body = Map<String, dynamic>.from(row['parsedRequest'] as Map)
@@ -2137,7 +2137,7 @@ void main() {
         () async {
           final crypto = _WireCrypto();
           if (duringSeal) crypto.sealing = Completer<Map<String, dynamic>>();
-          final relay = RelayRequests(crypto: crypto);
+          final relay = _connected(crypto);
           final sent = <String>[];
           final result = relay.request(
             operation: operation,
@@ -2464,6 +2464,15 @@ const _peer = PublicIdentity(
   keyId: 'connector-key',
   publicKey: 'unused-test-key',
 );
+final _testEpoch = 'e' * 43;
+int _nextSequence = 0;
+
+/// Relay requests only flow once a peer's hello has established an epoch.
+RelayRequests _connected(RelayCrypto crypto) {
+  final relay = RelayRequests(crypto: crypto);
+  relay.connect(peerKeyId: _peer.keyId, epoch: _testEpoch);
+  return relay;
+}
 
 // Only the crypto boundary is faked; correlation, wire version and disconnect
 // classification execute the production RelayRequests implementation.
@@ -2476,6 +2485,7 @@ final class _WireCrypto implements RelayCrypto {
     Map<String, dynamic> own,
     PublicIdentity peer,
     Map<String, dynamic> payload,
+    String epoch,
     int sequence,
   ) async {
     this.payload = payload;
@@ -2487,14 +2497,16 @@ final class _WireCrypto implements RelayCrypto {
     Map<String, dynamic> own,
     PublicIdentity peer,
     Map<String, dynamic> envelope,
+    String epoch,
   ) async => response;
   Map<String, dynamic> envelope() => {
-    'protocolVersion': 1,
+    'protocolVersion': 2,
     'type': 'relay.envelope',
     'messageId': requestId(),
     'senderKeyId': _peer.keyId,
     'recipientKeyId': _own['keyId'],
-    'sequence': 0,
+    'epoch': _testEpoch,
+    'sequence': _nextSequence++,
     'expiresAt': DateTime.now().millisecondsSinceEpoch + 60000,
     'suite': identitySuite,
     'encapsulatedKey': base64Url(List.filled(65, 1)),

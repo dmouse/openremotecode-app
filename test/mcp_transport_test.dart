@@ -19,7 +19,7 @@ void main() {
         () async {
           final crypto = _Crypto();
           if (duringSeal) crypto.sealing = Completer<Map<String, dynamic>>();
-          final relay = RelayRequests(crypto: crypto);
+          final relay = _connected(crypto);
           addTearDown(relay.disconnect);
           const other = PublicIdentity(keyId: 'other-key', publicKey: 'unused');
           final sent = <String>[];
@@ -76,7 +76,7 @@ void main() {
       'peer invalidation drops late decrypt ${failure ? 'failure' : 'event'} without invalidating healthy peer',
       () async {
         final crypto = _Crypto();
-        final relay = RelayRequests(crypto: crypto);
+        final relay = _connected(crypto);
         const other = PublicIdentity(keyId: 'other-key', publicKey: 'unused');
         final healthyGeneration = relay.generation(_peer.keyId);
         final affectedGeneration = relay.generation(other.keyId);
@@ -132,7 +132,7 @@ void main() {
       () async {
         final fixture = mcpFixture;
         final crypto = _Crypto();
-        final relay = RelayRequests(crypto: crypto);
+        final relay = _connected(crypto);
         addTearDown(relay.disconnect);
         final sent = Completer<String>();
         final request = Map<String, dynamic>.from(
@@ -169,7 +169,7 @@ void main() {
 
   test('event/response kind separation prevents pending request completion on ID collision', () async {
     final crypto = _Crypto();
-    final relay = RelayRequests(crypto: crypto);
+    final relay = _connected(crypto);
     addTearDown(relay.disconnect);
     final sent = Completer<String>();
     var completed = false;
@@ -226,7 +226,7 @@ void main() {
 
   test('wrong peer cannot answer a request; authenticated errors stay request-local', () async {
     final crypto = _Crypto();
-    final relay = RelayRequests(crypto: crypto);
+    final relay = _connected(crypto);
     addTearDown(relay.disconnect);
     final sent = Completer<String>();
     var completed = false;
@@ -286,16 +286,30 @@ void main() {
     'replayed encrypted events are dropped, including across reconnect',
     () async {
       final crypto = _Crypto()..opened = _event;
-      final relay = RelayRequests(crypto: crypto);
+      final relay = _connected(crypto);
       final envelope = _envelope();
       var count = 0;
       void event(String op, String id, Map<String, dynamic> body) => count++;
       await relay.receive(envelope, _own, _peer, onEvent: event);
+      // A replay inside the same epoch reuses its sequence and is refused.
       await relay.receive(envelope, _own, _peer, onEvent: event);
       relay.disconnect();
+      // With no epoch bound there is nothing to replay into.
       await relay.receive(envelope, _own, _peer, onEvent: event);
       expect(count, 1);
       expect(crypto.opens, 1);
+
+      // Reconnecting derives a fresh epoch, so the captured envelope no longer
+      // belongs to the live connection however recent it still is.
+      relay.connect(peerKeyId: _peer.keyId, epoch: 'f' * 43);
+      await expectLater(
+        relay.receive(envelope, _own, _peer, onEvent: event),
+        throwsFormatException,
+      );
+      expect(count, 1);
+      expect(crypto.opens, 1);
+
+      relay.connect(peerKeyId: _peer.keyId, epoch: testEpoch);
       await expectLater(
         relay.receive(
           {..._envelope(), 'expiresAt': 0},
@@ -323,7 +337,7 @@ void main() {
       'late async decryption after $transition is discarded before event dispatch',
       () async {
         final crypto = _Crypto()..opening = Completer<Map<String, dynamic>>();
-        final relay = RelayRequests(crypto: crypto);
+        final relay = _connected(crypto);
         var current = true, delivered = false;
         final opening = relay.receive(
           _envelope(),
@@ -380,23 +394,24 @@ void main() {
       'operation': 'project.mcp.subscribe',
       'body': mcpFixture['subscribeRequest'],
     };
-    final envelope = await crypto.seal(own, peer, request, 7);
+    final envelope = await crypto.seal(own, peer, request, testEpoch, 7);
     final seal = calls.single.arguments as Map;
     expect(jsonDecode(utf8.decode(seal['content'] as Uint8List)), request);
     expect(jsonEncode(envelope), isNot(contains('project.mcp')));
     expect(jsonEncode(envelope), isNot(contains(mcpProject)));
     expect(jsonDecode(utf8.decode(seal['aad'] as Uint8List)), [
       'opencode-remote-relay',
-      1,
+      2,
       'relay.envelope',
       envelope['messageId'],
       _own['keyId'],
       peer.keyId,
+      testEpoch,
       7,
       envelope['expiresAt'],
       identitySuite,
     ]);
-    expect(await crypto.open(own, peer, _envelope()), opened);
+    expect(await crypto.open(own, peer, _envelope(), testEpoch), opened);
     expect((calls.last.arguments as Map)['peerKey'], decodeUrl(peer.publicKey));
     for (final invalid in [
       {..._event, 'kind': 'request'},
@@ -407,7 +422,7 @@ void main() {
     ]) {
       opened = invalid;
       await expectLater(
-        crypto.open(own, peer, _envelope()),
+        crypto.open(own, peer, _envelope(), testEpoch),
         throwsFormatException,
       );
     }
@@ -416,14 +431,25 @@ void main() {
       'kind': 'response',
       'operation': 'project.mcp.subscribe',
     };
-    expect(await crypto.open(own, peer, _envelope()), opened);
+    expect(await crypto.open(own, peer, _envelope(), testEpoch), opened);
   });
 }
 
 const _own = <String, dynamic>{'keyId': 'client-key'};
 const _peer = PublicIdentity(keyId: 'connector-key', publicKey: 'unused');
+final testEpoch = 'e' * 43;
+int _nextSequence = 1;
+
+/// Relay requests only flow once a peer's hello has established an epoch.
+RelayRequests _connected(RelayCrypto crypto) {
+  final relay = RelayRequests(crypto: crypto);
+  for (final keyId in [_peer.keyId, 'other-key']) {
+    relay.connect(peerKeyId: keyId, epoch: testEpoch);
+  }
+  return relay;
+}
 Map<String, dynamic> get _event => {
-  'protocolVersion': 1,
+  'protocolVersion': 2,
   'kind': 'event',
   'requestId': mcpFixture['subscribeRequest']['subscriptionId'],
   'sentAt': 100,
@@ -431,12 +457,13 @@ Map<String, dynamic> get _event => {
   'body': mcpFixture['update'],
 };
 Map<String, dynamic> _envelope() => {
-  'protocolVersion': 1,
+  'protocolVersion': 2,
   'type': 'relay.envelope',
   'messageId': requestId(),
   'senderKeyId': _peer.keyId,
   'recipientKeyId': _own['keyId'],
-  'sequence': 1,
+  'epoch': testEpoch,
+  'sequence': _nextSequence++,
   'expiresAt': DateTime.now().millisecondsSinceEpoch + 60000,
   'suite': identitySuite,
   'encapsulatedKey': base64Url(List.filled(65, 1)),
@@ -452,6 +479,7 @@ final class _Crypto implements RelayCrypto {
     Map<String, dynamic> own,
     PublicIdentity peer,
     Map<String, dynamic> payload,
+    String epoch,
     int sequence,
   ) async {
     sealed = payload;
@@ -463,6 +491,7 @@ final class _Crypto implements RelayCrypto {
     Map<String, dynamic> own,
     PublicIdentity peer,
     Map<String, dynamic> envelope,
+    String epoch,
   ) async {
     opens++;
     return opening?.future ?? opened;
