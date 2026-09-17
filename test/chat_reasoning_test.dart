@@ -308,6 +308,8 @@ class _NoChatIO implements ChatRepository {
   @override
   Stream<void> get chatConnectionChanges => const Stream.empty();
   @override
+  Stream<ChatEvent> get chatEvents => const Stream.empty();
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw StateError('Unexpected chat IO');
 }

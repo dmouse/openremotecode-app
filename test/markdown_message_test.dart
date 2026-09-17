@@ -782,6 +782,9 @@ class _NoChatIO implements ChatRepository {
   Stream<void> get chatConnectionChanges => const Stream.empty();
 
   @override
+  Stream<ChatEvent> get chatEvents => const Stream.empty();
+
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw StateError('Unexpected repository call in presentation test');
 }

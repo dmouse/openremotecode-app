@@ -51,6 +51,8 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       trustLost: () => trustLost,
       active: () => _active,
       chatList: chatList,
+      credentialNotice: () => _credentialNotice,
+      dismissCredentialNotice: dismissCredentialNotice,
       forkNoticeFor: (path, id) => _forkNotices[(path, id)],
       setForkNotice: (path, id, message) => _forkNotices[(path, id)] = message,
       scheduleRefreshIfOnline: () {
@@ -61,6 +63,17 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       leaveConversationPage: () => page = ChatPage.chats,
       imagePreferences: imagePreferences,
     )..addListener(notifyListeners);
+    _credentialEvents = repository.chatEvents.listen((event) {
+      if (_disposed ||
+          event.connectorId != connectorId ||
+          event.operation != 'connector.credential.updated') {
+        return;
+      }
+      final message = credentialNoticeMessage(event.body);
+      if (message == null || !_seenCredentialNotices.add(event.requestId)) return;
+      _credentialNotice = message;
+      notifyListeners();
+    });
     _subscription = repository.chatConnectionChanges.listen((_) {
       if (!repository.chatTrusted(connectorId) && !_disposed) {
         trustLost = true;
@@ -141,6 +154,19 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       conversation.pendingCreationUncertainMessage;
 
   late final StreamSubscription<void> _subscription;
+  late final StreamSubscription<ChatEvent> _credentialEvents;
+  // A renewal is connector-scoped, so it is held here and shown in whichever conversation
+  // is open. Session-lifetime only: the connector owns message history, so this never
+  // becomes part of it. requestIds are remembered so a redelivery cannot show it twice.
+  final _seenCredentialNotices = <String>{};
+  String? _credentialNotice;
+  String? get credentialNotice => _credentialNotice;
+
+  void dismissCredentialNotice() {
+    if (_credentialNotice == null) return;
+    _credentialNotice = null;
+    notifyListeners();
+  }
   bool _disposed = false, _active = true, _online = false;
   final _forkNotices = <(String, String), String>{};
 
@@ -360,6 +386,7 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
 
   @override
   void dispose() {
+    unawaited(_credentialEvents.cancel());
     _disposed = true;
     invalidate();
     _subscription.cancel();

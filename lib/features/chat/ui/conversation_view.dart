@@ -197,6 +197,8 @@ class _ConversationViewState extends State<ConversationView> {
   Widget build(BuildContext context) {
     final latest = model.messages.lastOrNull;
     final showTyping = model.isSending || model.isWorking;
+    final credentialNotice = model.pendingCredentialNotice;
+    final lead = (showTyping ? 1 : 0) + (credentialNotice == null ? 0 : 1);
     if ((!identical(latest, _renderedLatest) ||
             showTyping != _renderedTyping) &&
         _revision == model.messageHistoryRevision &&
@@ -286,17 +288,18 @@ class _ConversationViewState extends State<ConversationView> {
           reverse: true,
           padding: const EdgeInsets.all(20),
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          itemCount: messages.length + 1 + (showTyping ? 1 : 0),
+          itemCount: messages.length + 1 + lead,
           findChildIndexCallback: (key) {
             if (key == const ValueKey('typing-indicator')) {
               return showTyping ? 0 : null;
             }
+            if (key == const ValueKey('credential-notice')) {
+              return credentialNotice == null ? null : (showTyping ? 1 : 0);
+            }
             final index = messages.indexWhere(
               (message) => ValueKey('message-${message.id}') == key,
             );
-            return index < 0
-                ? null
-                : messages.length - 1 - index + (showTyping ? 1 : 0);
+            return index < 0 ? null : messages.length - 1 - index + lead;
           },
           itemBuilder: (context, index) {
             if (showTyping && index == 0) {
@@ -308,6 +311,16 @@ class _ConversationViewState extends State<ConversationView> {
               );
             }
             if (showTyping) index--;
+            // The newest end of the reversed list, so a renewal appears where the latest
+            // activity is rather than buried above older messages.
+            if (credentialNotice != null && index == 0) {
+              return Padding(
+                key: const ValueKey('credential-notice'),
+                padding: const EdgeInsets.only(bottom: 12),
+                child: InlineNotice(message: credentialNotice),
+              );
+            }
+            if (credentialNotice != null) index--;
             if (index == messages.length) {
               return Column(
                 children: [

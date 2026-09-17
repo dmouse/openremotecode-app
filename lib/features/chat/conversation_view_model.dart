@@ -30,6 +30,8 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     required this.trustLost,
     required this.active,
     required this.chatList,
+    required this.credentialNotice,
+    required this.dismissCredentialNotice,
     required this.forkNoticeFor,
     required this.setForkNotice,
     required this.scheduleRefreshIfOnline,
@@ -73,6 +75,9 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   /// validity test.
   final bool Function() active;
   final ChatListViewModel chatList;
+  /// Connector-scoped, so it is owned by ChatViewModel and simply surfaced here.
+  final String? Function() credentialNotice;
+  final void Function() dismissCredentialNotice;
   final String? Function(String projectPath, String chatId) forkNoticeFor;
   final void Function(String projectPath, String chatId, String message)
   setForkNotice;
@@ -398,6 +403,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
 
   @override
   String? get pendingForkNotice => _forkNotice;
+  String? get pendingCredentialNotice => credentialNotice();
 
   @override
   String? get pendingCreationUncertainMessage => _creationUncertain

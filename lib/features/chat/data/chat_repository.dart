@@ -72,6 +72,17 @@ enum ChatFailure implements Exception {
   };
 }
 
+/// Renders a connector.credential.updated body, or null when it is not a shape this build
+/// understands. Defensive because the body crosses the relay boundary.
+String? credentialNoticeMessage(Map<String, dynamic> body) {
+  if (body['version'] != 1) return null;
+  return switch (body['outcome']) {
+    'renewed' => 'Remote access was renewed automatically.',
+    'failed' => 'Remote access could not be renewed. OpenCode will try again.',
+    _ => null,
+  };
+}
+
 final class RelayRequests {
   RelayRequests({this.crypto = const NativeRelayCrypto()});
   final RelayCrypto crypto;

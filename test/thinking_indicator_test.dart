@@ -221,6 +221,8 @@ class _Repository implements ChatRepository {
   @override
   Stream<void> get chatConnectionChanges => changes.stream;
   @override
+  Stream<ChatEvent> get chatEvents => const Stream.empty();
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw StateError('Unexpected repository call');
 }
