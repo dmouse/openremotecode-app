@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../ui/core/app_theme.dart';
+import '../../../ui/core/confirm_dialog.dart';
 import '../conversation_view_model.dart';
 
 /// The conversation's draft input row: the message field, its model/effort
-/// suffix button, a stop button while a response is in flight, and the send
-/// button (long-press to change Build/Plan mode).
+/// suffix button, and the primary button, which is the send button
+/// (long-press to change Build/Plan mode) or, while a response is in flight
+/// with nothing typed, a Stop button to abort it.
+/// Typing a message while the agent works turns the button back into the
+/// send button so the prompt can be queued under the current Build/Plan mode.
 class ChatComposerBar extends StatelessWidget {
   const ChatComposerBar({
     super.key,
@@ -26,6 +32,29 @@ class ChatComposerBar extends StatelessWidget {
   final bool online;
   final VoidCallback onOpenModelBanner;
   final VoidCallback onChoosePromptMode;
+
+  /// Asks before aborting, since stopping the agent discards in-flight work,
+  /// then aborts only if the session is still live and still working when the
+  /// user confirms -- the chat may have finished while the dialog was up.
+  Future<void> _confirmStop(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const ConfirmDialog(
+        title: 'Stop the agent?',
+        content: Text(
+          'Stop the current response before it finishes? Anything the agent already wrote stays in the chat.',
+        ),
+        confirmLabel: 'Stop agent',
+        destructive: true,
+      ),
+    );
+    if (confirmed == true &&
+        context.mounted &&
+        model.online() &&
+        (model.status == 'busy' || model.status == 'retry')) {
+      await model.abort();
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -80,18 +109,26 @@ class ChatComposerBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            if (model.status == 'busy' || model.status == 'retry')
-              IconButton(
-                tooltip: 'Stop response',
-                onPressed: online && !busy ? model.abort : null,
-                icon: const Icon(Icons.stop_circle_outlined),
-              ),
-            const SizedBox(width: 8),
             ValueListenableBuilder(
               valueListenable: draft,
               builder: (context, value, _) {
                 final mode = model.promptMode;
-                final label = model.isSending
+                // The primary button doubles as the Stop control: while the
+                // agent works, an empty draft shows Stop, and typing turns it
+                // back into the send button so the prompt can be queued under
+                // the selected Build/Plan mode. A pending custom-question
+                // answer keeps the Answer button instead, and the in-flight
+                // "Sending" spinner is never replaced by a Stop.
+                final working =
+                    model.status == 'busy' || model.status == 'retry';
+                final showStop =
+                    working &&
+                    value.text.trim().isEmpty &&
+                    !model.isSending &&
+                    !answeringQuestion;
+                final label = showStop
+                    ? 'Stop response'
+                    : model.isSending
                     ? 'Sending'
                     : answeringQuestion
                     ? 'Answer'
@@ -106,13 +143,15 @@ class ChatComposerBar extends StatelessWidget {
                         onChoosePromptMode,
                   },
                   child: Tooltip(
-                    message: '$label. Long press to change mode',
+                    message: showStop
+                        ? label
+                        : '$label. Long press to change mode',
                     triggerMode: TooltipTriggerMode.manual,
                     excludeFromSemantics: true,
                     child: MergeSemantics(
                       child: Semantics(
                         label: label,
-                        hint: 'Long press to change mode',
+                        hint: showStop ? null : 'Long press to change mode',
                         liveRegion: model.isSending,
                         child: FilledButton(
                           key: const ValueKey('chat-send'),
@@ -121,18 +160,25 @@ class ChatComposerBar extends StatelessWidget {
                             maximumSize: const Size(48, 48),
                             padding: EdgeInsets.zero,
                             shape: const CircleBorder(),
-                            backgroundColor: mode == PromptMode.plan
+                            backgroundColor: showStop
+                                ? Theme.of(context).colorScheme.error
+                                : mode == PromptMode.plan
                                 ? AppTheme.info
                                 : null,
-                            foregroundColor: mode == PromptMode.plan
+                            foregroundColor: showStop
+                                ? Theme.of(context).colorScheme.onError
+                                : mode == PromptMode.plan
                                 ? Colors.white
                                 : null,
                           ),
-                          onLongPress: model.canChangePromptMode
-                              ? onChoosePromptMode
-                              : null,
-                          onPressed:
-                              model.canSend && value.text.trim().isNotEmpty
+                          onLongPress: showStop || !model.canChangePromptMode
+                              ? null
+                              : onChoosePromptMode,
+                          onPressed: showStop
+                              ? online && !busy
+                                    ? () => unawaited(_confirmStop(context))
+                                    : null
+                              : model.canSend && value.text.trim().isNotEmpty
                               ? () async {
                                   final text = draft.text;
                                   final accepted = answeringQuestion
@@ -149,7 +195,7 @@ class ChatComposerBar extends StatelessWidget {
                                 }
                               : null,
                           child: ExcludeSemantics(
-                            child: model.isSending
+                            child: !showStop && model.isSending
                                 ? const SizedBox.square(
                                     dimension: 20,
                                     child: CircularProgressIndicator(
@@ -157,7 +203,9 @@ class ChatComposerBar extends StatelessWidget {
                                     ),
                                   )
                                 : Icon(
-                                    mode == PromptMode.plan
+                                    showStop
+                                        ? Icons.stop
+                                        : mode == PromptMode.plan
                                         ? Icons.edit_note
                                         : Icons.arrow_upward,
                                   ),

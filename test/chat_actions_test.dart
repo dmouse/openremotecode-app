@@ -758,6 +758,103 @@ void main() {
     },
   );
 
+  testWidgets('busy chat turns an empty send button into a Stop that aborts', (
+    tester,
+  ) async {
+    final repository = _Actions()..status = 'busy';
+    final model = await _show(tester, repository);
+    final send = find.byKey(const ValueKey('chat-send'));
+    expect(model.conversation.status, 'busy');
+    expect(find.byTooltip('Stop response'), findsOneWidget);
+    expect(find.byIcon(Icons.stop), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_upward), findsNothing);
+    expect(tester.widget<FilledButton>(send).onPressed, isNotNull);
+    expect(tester.widget<FilledButton>(send).onLongPress, isNull);
+    // The Stop asks before aborting; cancelling leaves the agent running.
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(find.text('Stop the agent?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(repository.calls.map((c) => c.$1), isNot(contains('chat.abort')));
+    // Confirming dispatches the abort.
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(find.text('Stop the agent?'), findsOneWidget);
+    await tester.tap(find.text('Stop agent'));
+    await tester.pumpAndSettle();
+    expect(repository.calls.map((c) => c.$1), contains('chat.abort'));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'typing while busy returns Send under the kept mode to queue the prompt',
+    (tester) async {
+      final repository = _Actions()..status = 'busy';
+      final model = await _show(tester, repository);
+      final send = find.byKey(const ValueKey('chat-send'));
+      expect(find.byTooltip('Stop response'), findsOneWidget);
+      await tester.enterText(_composer, 'Queued prompt');
+      await tester.pump();
+      expect(find.byTooltip('Stop response'), findsNothing);
+      expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+      // Long press still selects a mode while the agent works, and the send
+      // under that kept mode is what gets queued.
+      await tester.longPress(send);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Plan'));
+      await tester.pumpAndSettle();
+      expect(model.conversation.promptMode, PromptMode.plan);
+      await tester.tap(send);
+      await tester.pump();
+      expect(repository.calls.map((c) => c.$1), contains('chat.prompt'));
+      expect(
+        repository.calls.singleWhere((c) => c.$1 == 'chat.prompt').$2['mode'],
+        'plan',
+      );
+      // The accepted send clears the draft, so the button is Stop again.
+      await tester.pumpAndSettle();
+      expect(_draft(tester), isEmpty);
+      expect(find.byTooltip('Stop response'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('retry state shows Stop that clears once text is typed', (
+    tester,
+  ) async {
+    final repository = _Actions()..status = 'retry';
+    final model = await _show(tester, repository);
+    expect(model.conversation.status, 'retry');
+    expect(find.byTooltip('Stop response'), findsOneWidget);
+    await tester.enterText(_composer, 'Retry queue');
+    await tester.pump();
+    expect(find.byTooltip('Stop response'), findsNothing);
+    await tester.enterText(_composer, '');
+    await tester.pump();
+    expect(find.byTooltip('Stop response'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('idle chat keeps a plain send button with no Stop', (
+    tester,
+  ) async {
+    final repository = _Actions();
+    final model = await _show(tester, repository);
+    final send = find.byKey(const ValueKey('chat-send'));
+    expect(model.conversation.status, 'idle');
+    expect(find.byTooltip('Stop response'), findsNothing);
+    expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+    expect(tester.widget<FilledButton>(send).onPressed, isNull);
+    await tester.enterText(_composer, 'Idle prompt');
+    await tester.pump();
+    expect(find.byTooltip('Stop response'), findsNothing);
+    expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('mode picker is unavailable on old connectors and stale chats', (
     tester,
   ) async {
@@ -2372,6 +2469,7 @@ final class _Actions implements ChatRepository {
       },
       'chat.rename' => {'projectId', 'sessionId', 'title'},
       'chat.fork' => {'projectId', 'sessionId'},
+      'chat.abort' => {'projectId', 'sessionId'},
       'chat.prompt' => {
         'projectId',
         'sessionId',
@@ -2444,6 +2542,7 @@ final class _Actions implements ChatRepository {
                   'version': 1,
                   'chat': _summary(_fork, 'Forked chat', 300),
                 },
+                'chat.abort' => {'version': 1},
                 'chat.prompt' => {'version': 1, 'accepted': true},
                 _ => throw StateError('Unhandled operation $operation'),
               };
