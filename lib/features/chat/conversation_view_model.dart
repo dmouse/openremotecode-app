@@ -606,6 +606,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     }
     if (resetHistory) _clearMessages();
     chat = summary;
+    _syncChatList(summary);
     status = response['status'] as String;
     permission = parsePermission(response);
     question = parseQuestion(response);
@@ -670,6 +671,22 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     notifyListeners();
   }
 
+  // Snapshot polling picks up OpenCode's own asynchronous title generation
+  // (fires after the first prompt) as well as edits from other clients, but
+  // only this chat's own `chat` field reflected it until now -- the project's
+  // chat list kept showing the creation-time placeholder title until the
+  // list was refetched from scratch. Subtasks never appear in that list.
+  void _syncChatList(RemoteChat summary) {
+    if (isSubtask) return;
+    final current = chatList.chats.where((c) => c.id == summary.id).firstOrNull;
+    if (current != null &&
+        current.title == summary.title &&
+        current.updatedAt == summary.updatedAt) {
+      return;
+    }
+    chatList.applyUpdatedChat(summary);
+  }
+
   void _streamSnapshot(Map<String, dynamic> response, bool reset) {
     if (_disposed || chat == null) return;
     final summary = RemoteChat.parse(requiredMap(response, 'chat'));
@@ -687,6 +704,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
       messageHistoryRevision++;
     }
     chat = summary;
+    _syncChatList(summary);
     status = response['status'] as String;
     permission = parsePermission(response);
     question = parseQuestion(response);
@@ -752,6 +770,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
       // Keep a confirmed session after a disconnect/background transition, so
       // an explicit retry uses it. Never send the prompt after cancellation.
       chat = created;
+      chatList.applyCreatedChat(created);
       notifyListeners();
       if (valid(generation) &&
           repository.chatSupports(connectorId, 'chat.stream.subscribe')) {
