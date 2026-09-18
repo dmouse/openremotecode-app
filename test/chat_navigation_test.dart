@@ -1329,7 +1329,7 @@ void main() {
     },
   );
 
-  test('confirmed deletion handles newly created current chats absent from the list', () async {
+  test('a newly created current chat joins the list immediately, and deletion removes it', () async {
     final repository = _Chats();
     final model = ChatViewModel(repository, 'connector');
     addTearDown(() {
@@ -1341,12 +1341,16 @@ void main() {
     model.startNewChat();
     await model.conversation.send('Create a chat');
     expect(model.conversation.chat!.id, 'new');
-    expect(model.chatList.chats.any((chat) => chat.id == 'new'), isFalse);
+    // Shows up right away, ahead of a full list refresh -- with whatever
+    // placeholder title/timestamp chat.create returned -- so the chats page
+    // never looks like it silently dropped a chat someone just started.
+    expect(model.chatList.chats.any((chat) => chat.id == 'new'), isTrue);
     expect(model.conversation.canDeleteCurrentChat, isTrue);
     await model.conversation.deleteCurrentChat();
     expect(repository.deletes, 1);
     expect(model.conversation.chat, isNull);
     expect(model.page, ChatPage.chats);
+    expect(model.chatList.chats.any((chat) => chat.id == 'new'), isFalse);
   });
 
   test(
