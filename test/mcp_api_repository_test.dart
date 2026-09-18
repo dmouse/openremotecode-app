@@ -11,6 +11,7 @@ import 'package:openremotecode/features/chat/domain/mcp_models.dart';
 import 'package:openremotecode/features/chat/mcp_view_model.dart';
 import 'package:openremotecode/features/connections/data/api_connections_repository.dart';
 import 'package:openremotecode/features/connections/data/device_identity.dart';
+import 'package:openremotecode/features/connections/domain/remote_connection.dart';
 import 'package:openremotecode/features/server_settings/domain/server_endpoint.dart';
 import 'package:openremotecode/platform/remote_api.dart';
 
@@ -69,7 +70,7 @@ void main() {
           for (var i = 0; i < 4; i++) {
             h.sockets.last.add(
               jsonEncode({
-                'protocolVersion': 1,
+                'protocolVersion': 2,
                 'type': 'connector.offline',
                 'keyId': h.otherPeer!['keyId'],
               }),
@@ -172,6 +173,81 @@ void main() {
     expect(received.last.requestId, isNot(received.first.requestId));
   });
 
+  test(
+    'proactive renewal replaces the connection ahead of its lease without a visible disconnect',
+    () async {
+      final harness = await _Harness.open(
+        authorizationExpiresAt: DateTime.now().add(const Duration(seconds: 52)),
+      );
+      final repo = harness.repository;
+      final statuses = <ConnectionStatus>[];
+      final presence = repo.presence.listen(
+        (map) => statuses.add(map['connector']!),
+      );
+      addTearDown(presence.cancel);
+      final generation = repo.chatConnectionGeneration('connector');
+
+      // The renewal timer fires ~7s ahead of the 52s lease, given a 45s
+      // margin and a 5s minimum lead time below which it would not schedule.
+      await _untilEventually(() => harness.sockets.length == 2);
+      // A successful renewal is invisible on the repository's public API
+      // (no presence change, no generation bump), so wait for its other
+      // observable side effect instead: the superseded connection actually
+      // being closed by the client once the replacement is confirmed ready.
+      await _untilEventually(
+        () => harness.sockets.first.readyState != WebSocket.open,
+      );
+      await _until(() => repo.chatOnline('connector'));
+      expect(
+        statuses.any((status) => status == ConnectionStatus.offline),
+        isFalse,
+        reason: 'a proactive renewal must never publish an offline transition',
+      );
+      // The old connection's identity keeps working post-swap.
+      expect(repo.chatConnectionGeneration('connector'), same(generation));
+      expect(await repo.chatRequest('connector', 'chat.snapshot', {}), {
+        'version': 1,
+      });
+      expect(harness.operations, ['chat.snapshot']);
+
+      // The real relay force-closes the superseded connection once the
+      // replacement registers (ADR 0014) -- simulate that here.
+      await harness.sockets.first.close();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(
+        harness.sockets.length,
+        2,
+        reason:
+            'the superseded connection closing must not be treated as a '
+            'real disconnect and trigger another reconnect',
+      );
+      expect(repo.chatOnline('connector'), isTrue);
+      expect(
+        statuses.any((status) => status == ConnectionStatus.offline),
+        isFalse,
+      );
+      expect(repo.chatConnectionGeneration('connector'), same(generation));
+    },
+  );
+
+  test(
+    'an unexpected disconnect still falls back to the reactive reconnect path',
+    () async {
+      final harness = await _Harness.open();
+      final repo = harness.repository;
+      await _until(() => repo.chatOnline('connector'));
+      expect(harness.sockets.length, 1);
+
+      await harness.sockets.single.close();
+      await _until(() => !repo.chatOnline('connector'));
+      await _until(() => harness.sockets.length == 2);
+      await _until(() => repo.chatOnline('connector'));
+      expect(await repo.chatRequest('connector', 'chat.snapshot', {}), {
+        'version': 1,
+      });
+    },
+  );
+
   for (final transition in [
     'revocation-storage-failure',
     'key-change',
@@ -225,6 +301,17 @@ Future<void> _until(bool Function() ready) async {
   fail('Local relay test did not reach the expected state');
 }
 
+/// Like [_until], but with a longer budget for a renewal timer that must
+/// clear `ApiConnectionsRepository`'s minimum renewal lead time to be
+/// scheduled at all.
+Future<void> _untilEventually(bool Function() ready) async {
+  for (var i = 0; i < 2000; i++) {
+    if (ready()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail('Local relay test did not reach the expected state');
+}
+
 /// Real loopback WebSocket and production API repository; only auth HTTP,
 /// secure storage and native HPKE are test adapters. No native app is launched.
 final class _Harness {
@@ -244,9 +331,25 @@ final class _Harness {
   int delayedOpens = 0;
   Completer<void>? opening, gate;
   bool closing = false;
+  final connectorNonce = 'n' * 22;
+  String? clientNonce;
+  int sequence = 0;
+  DateTime? authorizationExpiresAt;
 
-  static Future<_Harness> open({bool twoConnectors = false}) async {
+  /// The same epoch the repository derives from the two hello nonces.
+  String epochFor(Map<String, dynamic> connector) => deriveRelayEpoch(
+    connectorKeyId: connector['keyId'] as String,
+    connectorNonce: connectorNonce,
+    clientKeyId: own['keyId'] as String,
+    clientNonce: clientNonce!,
+  );
+
+  static Future<_Harness> open({
+    bool twoConnectors = false,
+    DateTime? authorizationExpiresAt,
+  }) async {
     final h = _Harness();
+    h.authorizationExpiresAt = authorizationExpiresAt;
     h.server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     h.peer = generateDeviceKey(null);
     if (twoConnectors) h.otherPeer = generateDeviceKey(null);
@@ -310,12 +413,15 @@ final class _Harness {
         if (h.closing) return;
         final frame = jsonDecode(raw as String) as Map<String, dynamic>;
         if (frame['type'] == 'client.hello') {
+          h.clientNonce = frame['nonce'] as String;
           socket.add(
             jsonEncode({
-              'protocolVersion': 1,
+              'protocolVersion': 2,
               'type': 'relay.ready',
               'role': 'client',
               'keyId': h.own['keyId'],
+              if (h.authorizationExpiresAt case final expiresAt?)
+                'authorizationExpiresAt': expiresAt.toUtc().toIso8601String(),
             }),
           );
           h.hello(h.api.identity);
@@ -403,9 +509,10 @@ final class _Harness {
 
   void hello(Map<String, dynamic> identity) => sockets.last.add(
     jsonEncode({
-      'protocolVersion': 1,
+      'protocolVersion': 2,
       'type': 'connector.hello',
       'identity': identity,
+      'nonce': connectorNonce,
       'capabilities': [...McpSnapshot.capabilities, 'chat.snapshot'],
     }),
   );
@@ -413,7 +520,7 @@ final class _Harness {
   void sendEvent({String? id, int revision = 1, Map<String, dynamic>? from}) {
     final update = mcpFixture['update'] as Map<String, dynamic>;
     send({
-      'protocolVersion': 1,
+      'protocolVersion': 2,
       'kind': 'event',
       'operation': 'project.mcp.updated',
       'requestId': id ?? update['subscriptionId'],
@@ -428,14 +535,16 @@ final class _Harness {
 
   void send(Map<String, dynamic> payload, {Map<String, dynamic>? from}) {
     if (sockets.last.readyState != WebSocket.open) return;
+    final sender = from ?? peer;
     sockets.last.add(
       jsonEncode({
-        'protocolVersion': 1,
+        'protocolVersion': 2,
         'type': 'relay.envelope',
         'messageId': requestId(),
-        'senderKeyId': (from ?? peer)['keyId'],
+        'senderKeyId': sender['keyId'],
         'recipientKeyId': own['keyId'],
-        'sequence': 1,
+        'epoch': epochFor(sender),
+        'sequence': sequence++,
         'expiresAt': DateTime.now().millisecondsSinceEpoch + 60000,
         'suite': identitySuite,
         'encapsulatedKey': base64Url(List.filled(65, 1)),
