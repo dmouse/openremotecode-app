@@ -56,8 +56,9 @@ class _QuestionBannerState extends State<QuestionBanner> {
       _pageIndex = batch.questions.length - 1;
     }
     // Free-text drafting always shows the page it targets, even if paging moved away.
-    if (widget.model.answeringQuestionIndex case final index?)
+    if (widget.model.answeringQuestionIndex case final index?) {
       _pageIndex = index;
+    }
     // A page's checkboxes default to whatever was already staged for it (e.g. after
     // paging Back to revise an earlier answer), never a previous page's selection.
     if (_selectedForPage != _pageIndex) {
