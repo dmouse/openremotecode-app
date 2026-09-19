@@ -127,6 +127,15 @@ silently replaced. Presence uses single-use relay tickets and suspends in the
 background. Chat/session browsing and encrypted message exchange are the next
 feature; connection cards currently show inventory and presence.
 
+## Release versions
+
+Pushing a tag such as `v1.2.3` runs the release workflow, which builds the signed
+APK and AAB with version name `1.2.3` and a build number equal to the workflow
+run number (Android's version code must only ever increase). The tag must be
+exactly `vMAJOR.MINOR.PATCH`; anything else fails the build before it starts.
+The `version:` in `pubspec.yaml` is only the default for local and CI test
+builds, so it does not need to be edited for a release.
+
 ## Verification
 
 Chat title taps open the existing Chat details route, including a read-only

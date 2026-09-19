@@ -46,6 +46,22 @@ jobs:
         working-directory: mobile
         run: flutter pub get
 
+      # The tag is the source of truth for the release version: v1.2.3 builds
+      # versionName 1.2.3. pubspec.yaml's version only applies to local builds.
+      # Android's versionCode must strictly increase for Play, so the build
+      # number is the workflow run number, which never repeats or decreases.
+      - name: Derive version from tag
+        env:
+          TAG: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Tag '$TAG' must look like v1.2.3 (iOS versions allow digits and dots only)"
+            exit 1
+          fi
+          echo "BUILD_NAME=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$RUN_NUMBER" >> "$GITHUB_ENV"
+
       - name: Decode signing keystore
         working-directory: mobile/android
         env:
@@ -70,13 +86,19 @@ jobs:
         working-directory: mobile
         env:
           REMOTE_SERVER_URL: ${{ vars.REMOTE_SERVER_URL }}
-        run: flutter build apk --release --dart-define=REMOTE_SERVER_URL="$REMOTE_SERVER_URL"
+        run: >
+          flutter build apk --release
+          --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER"
+          --dart-define=REMOTE_SERVER_URL="$REMOTE_SERVER_URL"
 
       - name: Build signed release AAB
         working-directory: mobile
         env:
           REMOTE_SERVER_URL: ${{ vars.REMOTE_SERVER_URL }}
-        run: flutter build appbundle --release --dart-define=REMOTE_SERVER_URL="$REMOTE_SERVER_URL"
+        run: >
+          flutter build appbundle --release
+          --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER"
+          --dart-define=REMOTE_SERVER_URL="$REMOTE_SERVER_URL"
 
       # The keystore and key.properties hold plaintext signing secrets on disk;
       # scrub them as soon as the signed artifacts exist so no later step in
