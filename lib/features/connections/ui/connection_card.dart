@@ -36,8 +36,7 @@ class ConnectionCard extends StatelessWidget {
     child: Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onSelect,
-        onDoubleTap: onOpen,
+        onTap: onOpen ?? onSelect,
         borderRadius: BorderRadius.circular(20),
         child: Container(
           padding: const EdgeInsets.all(20),

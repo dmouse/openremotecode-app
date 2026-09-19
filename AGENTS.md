@@ -31,7 +31,7 @@ Organize the application around these areas:
 - Connector state: inventory, presence, endpoint selection, capabilities, and compatibility.
 - Session state: snapshots, session selection, creation, status, and todos.
 - Conversation state: messages, streaming parts, drafts, pending commands, abort, and errors.
-- Permission decisions: high-visibility, time-sensitive once-or-reject responses.
+- Permission decisions: high-visibility, time-sensitive deny, allow once, and always allow responses.
 - Platform integration: app lifecycle, deep links, secure storage, network status, accessibility, and eventual push notifications.
 
 UI features depend on application services and stable product types. Native storage, cryptography, HTTP, WebSocket, and lifecycle APIs remain behind platform adapters.
@@ -80,7 +80,7 @@ The local OpenCode connector is authoritative and must be online for live access
 
 Conversation rendering supports incremental message parts, tool-state summaries, errors, todos, and session status while treating all received content as untrusted. The initial release does not browse arbitrary local files or expose raw shell execution.
 
-Permission requests require explicit user action and clear risk context. Only one-time approval and rejection are initially available. If the connector goes offline or the request expires, the UI must disable stale actions.
+Permission requests require explicit user action and clear risk context. Deny, allow once, and always allow are available; always allow is a persistent grant, so it is only ever sent for an explicit tap. If the connector goes offline or the request expires, the UI must disable stale actions.
 
 The app does not retain a durable offline copy of conversations. Temporary in-memory state may remain while the app process is active, but a cold start obtains fresh state from the connector.
 

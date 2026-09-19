@@ -70,7 +70,8 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
         return;
       }
       final message = credentialNoticeMessage(event.body);
-      if (message == null || !_seenCredentialNotices.add(event.requestId)) return;
+      if (message == null || !_seenCredentialNotices.add(event.requestId))
+        return;
       _credentialNotice = message;
       notifyListeners();
     });
@@ -171,6 +172,7 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
     _credentialNotice = null;
     notifyListeners();
   }
+
   bool _disposed = false, _active = true, _online = false;
   final _forkNotices = <(String, String), String>{};
 

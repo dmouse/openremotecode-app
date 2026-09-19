@@ -123,14 +123,20 @@ final class RelayRequests {
     );
     unawaited(() async {
       try {
-        final envelope = await crypto.seal(identity, peer, {
-          'protocolVersion': relayProtocolVersion,
-          'kind': 'request',
-          'requestId': id,
-          'sentAt': DateTime.now().millisecondsSinceEpoch,
-          'operation': operation,
-          'body': {'version': 1, ...body},
-        }, epoch.epoch, epoch.sequence++);
+        final envelope = await crypto.seal(
+          identity,
+          peer,
+          {
+            'protocolVersion': relayProtocolVersion,
+            'kind': 'request',
+            'requestId': id,
+            'sentAt': DateTime.now().millisecondsSinceEpoch,
+            'operation': operation,
+            'body': {'version': 1, ...body},
+          },
+          epoch.epoch,
+          epoch.sequence++,
+        );
         if (generation != _generations[peer.keyId] ||
             entry.completer.isCompleted ||
             _pending[id] != entry) {

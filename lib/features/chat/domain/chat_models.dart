@@ -436,10 +436,22 @@ final class ChatSubtask {
   }
 }
 
+/// The user's answer to a pending permission request, mirroring OpenCode's
+/// own choices. [always] is a persistent grant the user makes explicitly for
+/// one request. [wire] is the value the protocol carries. See
+/// CHAT-PERMISSIONS.md.
+enum PermissionDecision {
+  reject('reject'),
+  once('once'),
+  always('always');
+
+  const PermissionDecision(this.wire);
+  final String wire;
+}
+
 /// A pending permission request. Only what OpenCode itself prepared for
 /// display crosses the wire -- never raw native metadata. See
-/// CHAT-PERMISSIONS.md. A reply is `'once'` or `'reject'` only; the app
-/// never offers a persistent `'always'` grant.
+/// CHAT-PERMISSIONS.md.
 final class ChatPermission {
   const ChatPermission({
     required this.id,
@@ -492,7 +504,10 @@ final class ChatQuestionOption {
         value.keys.any((key) => !['label', 'description'].contains(key))) {
       throw const FormatException();
     }
-    return ChatQuestionOption(label: label, description: description as String?);
+    return ChatQuestionOption(
+      label: label,
+      description: description as String?,
+    );
   }
 }
 
@@ -526,13 +541,15 @@ final class ChatQuestionPrompt {
         options.isEmpty ||
         options.length > 32 ||
         value.keys.any(
-          (key) => [
-            'header',
-            'question',
-            'options',
-            'multiple',
-            'custom',
-          ].contains(key) == false,
+          (key) =>
+              [
+                'header',
+                'question',
+                'options',
+                'multiple',
+                'custom',
+              ].contains(key) ==
+              false,
         )) {
       throw const FormatException();
     }
@@ -541,7 +558,8 @@ final class ChatQuestionPrompt {
       question: question,
       options: options
           .map(
-            (option) => ChatQuestionOption.parse(option as Map<String, dynamic>),
+            (option) =>
+                ChatQuestionOption.parse(option as Map<String, dynamic>),
           )
           .toList(growable: false),
       multiple: value['multiple'] as bool,

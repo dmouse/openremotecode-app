@@ -1779,7 +1779,7 @@ void main() {
     expect(model.project, isNull);
   });
   testWidgets(
-    'double tap follows Connection → Project → Chats → Conversation and back',
+    'single tap follows Connection → Project → Chats → Conversation and back',
     (tester) async {
       final repository = _Chats();
       addTearDown(repository.changes.close);
@@ -1810,8 +1810,6 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Laptop'));
-      await tester.pump(const Duration(milliseconds: 60));
       await tester.tap(find.text('Laptop'));
       await tester.pumpAndSettle();
       expect(find.widgetWithText(AppBar, 'Laptop'), findsOneWidget);

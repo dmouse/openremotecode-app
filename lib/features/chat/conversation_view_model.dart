@@ -75,6 +75,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   /// validity test.
   final bool Function() active;
   final ChatListViewModel chatList;
+
   /// Connector-scoped, so it is owned by ChatViewModel and simply surfaced here.
   final String? Function() credentialNotice;
   final void Function() dismissCredentialNotice;
@@ -261,7 +262,9 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     _stagedBatchId = pending.id;
     _staged
       ..clear()
-      ..addAll(List<Map<String, dynamic>?>.filled(pending.questions.length, null));
+      ..addAll(
+        List<Map<String, dynamic>?>.filled(pending.questions.length, null),
+      );
   }
 
   /// The option indices already staged for question [index] of the pending batch, or
@@ -884,11 +887,14 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
       return Future.value();
     }
     final options = pending.questions[index].options;
-    final valid_ = selected
-        .where((optionIndex) => optionIndex >= 0 && optionIndex < options.length)
-        .toSet()
-        .toList(growable: false)
-      ..sort();
+    final valid_ =
+        selected
+            .where(
+              (optionIndex) => optionIndex >= 0 && optionIndex < options.length,
+            )
+            .toSet()
+            .toList(growable: false)
+          ..sort();
     if (valid_.isEmpty) return Future.value();
     _ensureStaged(pending);
     _staged[index] = {'selected': valid_};
@@ -1026,9 +1032,10 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     onAfterStale: scheduleRefreshIfOnline,
   );
 
-  /// [response] is `'once'` or `'reject'` only -- never a persistent
-  /// `'always'` grant. See CHAT-PERMISSIONS.md.
-  Future<void> respondToPermission(String response) => run(
+  /// Answers the pending permission request. [PermissionDecision.always] is a
+  /// persistent grant, sent only for an explicit user tap. See
+  /// CHAT-PERMISSIONS.md.
+  Future<void> respondToPermission(PermissionDecision decision) => run(
     (generation) async {
       final pending = permission;
       final selectedProject = project();
@@ -1047,7 +1054,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
         'projectId': selectedProject.id,
         'sessionId': chat!.id,
         'permissionId': pending.id,
-        'response': response,
+        'response': decision.wire,
       });
       if (valid(generation)) await _readSnapshot(generation);
     },

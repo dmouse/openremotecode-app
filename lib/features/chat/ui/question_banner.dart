@@ -56,7 +56,8 @@ class _QuestionBannerState extends State<QuestionBanner> {
       _pageIndex = batch.questions.length - 1;
     }
     // Free-text drafting always shows the page it targets, even if paging moved away.
-    if (widget.model.answeringQuestionIndex case final index?) _pageIndex = index;
+    if (widget.model.answeringQuestionIndex case final index?)
+      _pageIndex = index;
     // A page's checkboxes default to whatever was already staged for it (e.g. after
     // paging Back to revise an earlier answer), never a previous page's selection.
     if (_selectedForPage != _pageIndex) {
@@ -107,8 +108,7 @@ class _QuestionBannerState extends State<QuestionBanner> {
                       Text(
                         question.question,
                         style: const TextStyle(color: AppTheme.ink),
-                        semanticsLabel:
-                            'OpenCode asks: ${question.question}',
+                        semanticsLabel: 'OpenCode asks: ${question.question}',
                       ),
                     ],
                   ),
@@ -305,7 +305,10 @@ class _CustomAnswerOption extends StatelessWidget {
                 SizedBox(width: 8),
                 Text(
                   'Type your own answer',
-                  style: TextStyle(color: AppTheme.ink, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    color: AppTheme.ink,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),

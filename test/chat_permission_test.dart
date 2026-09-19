@@ -49,11 +49,48 @@ void main() {
       expect(find.text('Run a shell command'), findsOneWidget);
       expect(find.text('npm i*'), findsOneWidget);
       expect(find.text('Allow once'), findsOneWidget);
+      expect(find.text('Always allow'), findsOneWidget);
       expect(find.text('Deny'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       model.dispose();
     },
   );
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('the three actions fit a 360dp phone at text scale $scale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final model = ChatViewModel(_Repository(), 'connector')
+        ..conversation.permission = ChatPermission.parse(_permission);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: Scaffold(body: PermissionBanner(model: model.conversation)),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      // flutter_test's Ahem font makes every glyph as wide as its font size, so
+      // the row may wrap here where a real font fits one line. What must hold
+      // either way is that nothing overflows and the buttons stay compact.
+      if (scale == 1.0) {
+        expect(tester.getSize(find.byType(FilledButton)).height, 40);
+      }
+      for (final label in ['Deny', 'Always allow', 'Allow once']) {
+        final box = tester.getRect(find.text(label));
+        expect(box.left, greaterThanOrEqualTo(0));
+        expect(box.right, lessThanOrEqualTo(360));
+      }
+      await tester.pumpWidget(const SizedBox());
+      model.dispose();
+    });
+  }
 
   testWidgets('renders nothing when no permission is pending', (tester) async {
     final model = ChatViewModel(_Repository(), 'connector');
@@ -88,38 +125,51 @@ void main() {
     },
   );
 
-  testWidgets(
-    'Allow once sends the reply and the banner clears once the model reflects it resolved',
-    (tester) async {
-      final repo = _Repository()..permission = _permission;
-      final model = ChatViewModel(repo, 'connector');
-      await model.refresh();
-      await model.openProject(model.projects.projects.single);
-      await model.openChat(model.chatList.chats.single);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ListenableBuilder(
-              listenable: model,
-              builder: (context, _) =>
-                  PermissionBanner(model: model.conversation),
+  test('the shared fixture lists exactly the wire values the app sends', () {
+    expect(
+      PermissionDecision.values.map((d) => d.wire).toList()..sort(),
+      (_fixture['replies'] as List).cast<String>().toList()..sort(),
+    );
+  });
+
+  for (final (label, wire) in [
+    ('Allow once', 'once'),
+    ('Always allow', 'always'),
+    ('Deny', 'reject'),
+  ]) {
+    testWidgets(
+      '$label sends the reply and the banner clears once the model reflects it resolved',
+      (tester) async {
+        final repo = _Repository()..permission = _permission;
+        final model = ChatViewModel(repo, 'connector');
+        await model.refresh();
+        await model.openProject(model.projects.projects.single);
+        await model.openChat(model.chatList.chats.single);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ListenableBuilder(
+                listenable: model,
+                builder: (context, _) =>
+                    PermissionBanner(model: model.conversation),
+              ),
             ),
           ),
-        ),
-      );
-      expect(find.text('Run a shell command'), findsOneWidget);
-      await tester.tap(find.text('Allow once'));
-      await tester.pumpAndSettle();
-      final reply = repo.requests.firstWhere(
-        (r) => r.$1 == 'chat.permission.reply',
-      );
-      expect(reply.$2['permissionId'], 'per_fixture');
-      expect(reply.$2['response'], 'once');
-      expect(find.text('Run a shell command'), findsNothing);
-      await tester.pumpWidget(const SizedBox());
-      model.dispose();
-    },
-  );
+        );
+        expect(find.text('Run a shell command'), findsOneWidget);
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+        final reply = repo.requests.firstWhere(
+          (r) => r.$1 == 'chat.permission.reply',
+        );
+        expect(reply.$2['permissionId'], 'per_fixture');
+        expect(reply.$2['response'], wire);
+        expect(find.text('Run a shell command'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+        model.dispose();
+      },
+    );
+  }
 }
 
 class _Repository implements ChatRepository {

@@ -4,16 +4,28 @@ import 'package:flutter/material.dart';
 
 import '../../../ui/core/app_theme.dart';
 import '../conversation_view_model.dart';
+import '../domain/chat_models.dart';
 import 'activity_presentation.dart';
 
 /// A persistent, non-dismissible banner for a pending permission request --
 /// high-visibility and time-sensitive, per mobile/AGENTS.md. Actions are
 /// replaced by an explanatory message rather than merely disabled once the
 /// connector is offline or no longer live, since a stale request may
-/// already be answered or expired. See CHAT-PERMISSIONS.md.
+/// already be answered or expired. Offers the same three choices as the
+/// OpenCode TUI: deny, allow once and always allow. See CHAT-PERMISSIONS.md.
 class PermissionBanner extends StatelessWidget {
   const PermissionBanner({super.key, required this.model});
   final ConversationViewModel model;
+
+  // The theme's default button sizes leave no room for three actions on one
+  // line. The visible button is 40dp tall; the default padded tap target keeps
+  // the hit area at 48dp.
+  static final ButtonStyle _compact = ButtonStyle(
+    minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
+    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 12)),
+    visualDensity: VisualDensity.compact,
+    textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 14)),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -73,18 +85,30 @@ class PermissionBanner extends StatelessWidget {
                 style: const TextStyle(color: AppTheme.muted),
               )
             else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 4,
                 children: [
                   TextButton(
-                    onPressed: () =>
-                        unawaited(model.respondToPermission('reject')),
+                    style: _compact,
+                    onPressed: () => unawaited(
+                      model.respondToPermission(PermissionDecision.reject),
+                    ),
                     child: const Text('Deny'),
                   ),
-                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    style: _compact,
+                    onPressed: () => unawaited(
+                      model.respondToPermission(PermissionDecision.always),
+                    ),
+                    child: const Text('Always allow'),
+                  ),
                   FilledButton(
-                    onPressed: () =>
-                        unawaited(model.respondToPermission('once')),
+                    style: _compact,
+                    onPressed: () => unawaited(
+                      model.respondToPermission(PermissionDecision.once),
+                    ),
                     child: const Text('Allow once'),
                   ),
                 ],
