@@ -628,6 +628,19 @@ void main() {
   }
 
   test(
+    'an empty OpenCode session can be deleted but cannot be forked',
+    () async {
+      final repository = _Actions();
+      final model = await _open(repository);
+      model.conversation.messages = [];
+      expect(model.conversation.canFork, isFalse);
+      expect(model.conversation.canDeleteCurrentChat, isTrue);
+      await model.conversation.forkChat();
+      expect(repository.mutations, isEmpty);
+    },
+  );
+
+  test(
     'unsupported, offline and uncreated draft actions never dispatch',
     () async {
       final repository = _Actions();
@@ -767,7 +780,7 @@ void main() {
     expect(model.conversation.status, 'busy');
     expect(find.byTooltip('Stop response'), findsOneWidget);
     expect(find.byIcon(Icons.stop), findsOneWidget);
-    expect(find.byIcon(Icons.arrow_upward), findsNothing);
+    expect(find.byIcon(Icons.arrow_forward), findsNothing);
     expect(tester.widget<FilledButton>(send).onPressed, isNotNull);
     expect(tester.widget<FilledButton>(send).onLongPress, isNull);
     // The Stop asks before aborting; cancelling leaves the agent running.
@@ -798,7 +811,7 @@ void main() {
       await tester.enterText(_composer, 'Queued prompt');
       await tester.pump();
       expect(find.byTooltip('Stop response'), findsNothing);
-      expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward), findsOneWidget);
       // Long press still selects a mode while the agent works, and the send
       // under that kept mode is what gets queued.
       await tester.longPress(send);
@@ -846,12 +859,12 @@ void main() {
     final send = find.byKey(const ValueKey('chat-send'));
     expect(model.conversation.status, 'idle');
     expect(find.byTooltip('Stop response'), findsNothing);
-    expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_forward), findsOneWidget);
     expect(tester.widget<FilledButton>(send).onPressed, isNull);
     await tester.enterText(_composer, 'Idle prompt');
     await tester.pump();
     expect(find.byTooltip('Stop response'), findsNothing);
-    expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_forward), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -2160,6 +2173,26 @@ void main() {
         );
       }
       expect(find.textContaining('Restart OpenCode'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      repository.unsupported.remove('chat.fork');
+      await model.refresh();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Chat options'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Rename is not supported by this connector.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Restart OpenCode'), findsNothing);
+      expect(
+        tester
+            .widget<PopupMenuItem<String>>(
+              find.widgetWithText(PopupMenuItem<String>, 'Fork chat'),
+            )
+            .enabled,
+        isTrue,
+      );
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       repository.unsupported.clear();

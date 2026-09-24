@@ -207,7 +207,7 @@ class ChatComposerBar extends StatelessWidget {
                                         ? Icons.stop
                                         : mode == PromptMode.plan
                                         ? Icons.edit_note
-                                        : Icons.arrow_upward,
+                                        : Icons.arrow_forward,
                                   ),
                           ),
                         ),

@@ -24,7 +24,7 @@ MainApp testApp({
 Future<void> openSettings(WidgetTester tester) async {
   await tester.ensureVisible(find.byType(LoginHeader));
   for (var i = 0; i < 6; i++) {
-    await tester.tap(find.text('Open Remote Code'));
+    await tester.tap(find.text('Remote'));
     await tester.pump(const Duration(milliseconds: 100));
   }
   await tester.pumpAndSettle();
@@ -60,8 +60,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No remote server is configured.'), findsOneWidget);
     expect(find.byType(ServerSettingsSheet), findsNothing);
-    await tester.ensureVisible(find.text('Open Remote Code'));
-    await tester.longPress(find.text('Open Remote Code'));
+    await tester.ensureVisible(find.text('Remote'));
+    await tester.longPress(find.text('Remote'));
     await tester.pumpAndSettle();
     expect(find.byType(ServerSettingsSheet), findsNothing);
   });
@@ -113,11 +113,11 @@ void main() {
       );
       await mount(tester, repository);
       for (var i = 0; i < 5; i++) {
-        await tester.tap(find.text('Open Remote Code'));
+        await tester.tap(find.text('Remote'));
         await tester.pump(const Duration(milliseconds: 100));
       }
       expect(find.byType(ServerSettingsSheet), findsNothing);
-      await tester.tap(find.text('Open Remote Code'));
+      await tester.tap(find.text('Remote'));
       await tester.pumpAndSettle();
       expect(find.byType(ServerSettingsSheet), findsOneWidget);
       await tester.enterText(
@@ -128,7 +128,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(repository.value, 'https://old.example.com');
       expect(repository.writes, 0);
-      await tester.tap(find.text('Open Remote Code'));
+      await tester.tap(find.text('Remote'));
       await tester.pumpAndSettle();
       expect(find.byType(ServerSettingsSheet), findsNothing);
     },

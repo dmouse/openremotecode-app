@@ -386,7 +386,10 @@ final class ApiConnectionsRepository
   /// registration atomically the moment the new one registers (ADR 0014),
   /// so presence never needs to flip offline for this.
   Future<void> _renew(int generation) async {
-    if (!_active || _disposed || generation != _socketGeneration || _socket == null) {
+    if (!_active ||
+        _disposed ||
+        generation != _socketGeneration ||
+        _socket == null) {
       return;
     }
     ({WebSocket socket, String nonce})? opened;
@@ -396,7 +399,10 @@ final class ApiConnectionsRepository
       opened = null;
     }
     if (opened == null) return;
-    if (!_active || _disposed || generation != _socketGeneration || _socket == null) {
+    if (!_active ||
+        _disposed ||
+        generation != _socketGeneration ||
+        _socket == null) {
       unawaited(opened.socket.close());
       return;
     }
@@ -963,6 +969,7 @@ final class ApiConnectionsRepository
     if (error is ApiException) {
       if (error.status == 401) return ConnectionFailure.unauthorized;
       if (error.status == 410) return ConnectionFailure.expiredCode;
+      if (error.status == 429) return ConnectionFailure.tooManyAttempts;
       if (error.status == 409) {
         return confirming
             ? ConnectionFailure.connectorNotReady

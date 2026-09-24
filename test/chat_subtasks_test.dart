@@ -236,8 +236,8 @@ void main() {
   // keep showing work in flight.
   for (final (status, badge) in [
     ('running', 'Working'),
-    ('pending', 'Working'),
-    ('retry', 'Working'),
+    ('pending', 'Online'),
+    ('retry', 'Online'),
     ('completed', 'Online'),
   ]) {
     testWidgets('an idle session with a $status task badges the agent $badge', (
@@ -484,7 +484,10 @@ class _Repository implements ChatRepository {
           for (final message in result['messages'] as List) {
             for (final part in (message as Map)['parts'] as List? ?? []) {
               final task = (part as Map)['task'];
-              if (task is Map) task['status'] = taskStatus;
+              if (task is Map) {
+                task['status'] = taskStatus;
+                task['background'] = true;
+              }
             }
           }
         }

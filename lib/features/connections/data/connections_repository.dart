@@ -18,6 +18,7 @@ enum ConnectionFailure implements Exception {
   network,
   identityMismatch,
   connectorNotReady,
+  tooManyAttempts,
   secureStorage;
 
   String get message => switch (this) {
@@ -30,7 +31,9 @@ enum ConnectionFailure implements Exception {
     network =>
       'Could not reach your server. Check your connection and try again.',
     identityMismatch => 'The device identity changed. Start a new pairing.',
-    connectorNotReady => 'OpenCode has not reviewed this pairing yet. Check its screen, then try confirming again.',
+    connectorNotReady => 'OpenCode has not approved this phone yet. Approve it in OpenCode, then confirm again.',
+    tooManyAttempts =>
+      'Too many attempts. Wait a few minutes, then try the code again.',
     secureStorage =>
       'Could not save device trust securely. Unlock your device and try again.',
   };

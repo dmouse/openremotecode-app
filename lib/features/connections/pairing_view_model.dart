@@ -92,6 +92,7 @@ final class PairingViewModel extends ChangeNotifier {
         // A request may have reached the server. Never automatically retry a
         // confirmation with an uncertain outcome or keep stale trust material.
         if (error != ConnectionFailure.connectorNotReady &&
+            error != ConnectionFailure.tooManyAttempts &&
             error != ConnectionFailure.secureStorage &&
             error != ConnectionFailure.network) {
           _review = null;

@@ -81,7 +81,7 @@ class _PairingSheetState extends State<PairingSheet> {
                 ),
               ] else ...[
                 const Text(
-                  'Compare every group with the safety code shown in OpenCode. Confirm only if they all match.',
+                  'Compare every group with the safety code shown in OpenCode. If they all match, approve this phone in OpenCode, then confirm here.',
                 ),
                 const SizedBox(height: 24),
                 Semantics(

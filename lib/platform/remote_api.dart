@@ -32,6 +32,8 @@ final class ApiException implements Exception {
 
   String get message => switch (code) {
     'invalid_credentials' => 'Email or password is incorrect.',
+    'disposable_email' =>
+      'Temporary email addresses are not accepted. Use a permanent address.',
     'invalid_verification_code' =>
       'That code is incorrect or has expired. Request a new one.',
     'invalid_google_token' =>

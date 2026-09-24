@@ -389,7 +389,7 @@ class ConversationViewState extends State<ConversationView> {
         online: model.online(),
         active:
             model.activityLive &&
-            (part.activity != null || ['busy', 'retry'].contains(model.status)),
+            ['busy', 'retry'].contains(model.status),
       );
     }
     if (part.isReasoning) {
@@ -398,7 +398,7 @@ class ConversationViewState extends State<ConversationView> {
         part: part,
         active:
             model.activityLive &&
-            (part.activity != null || model.status == 'busy'),
+            ['busy', 'retry'].contains(model.status),
       );
     }
     if (part.image case final image?) {

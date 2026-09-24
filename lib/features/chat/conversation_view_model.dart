@@ -117,16 +117,27 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
       !_covered &&
       error == null &&
       (status == 'busy' ||
-          messages.any(
-            (m) =>
-                m.parts?.any(
-                  // A subtask carries no activity of its own, and a background
-                  // one leaves this session idle while it runs, so its own
-                  // status is the only sign the chat is still waiting.
-                  (p) => p.activity?.running == true || p.task?.active == true,
-                ) ==
-                true,
-          ));
+          status == 'retry' ||
+          // Historical tool/reasoning parts can remain marked running after
+          // OpenCode reports the session idle (especially outside the latest
+          // snapshot page). They are not evidence of current work. A background
+          // subtask is the exception: its parent may be idle while it runs.
+          // Native latest-page snapshots contain at most ten messages. Only a
+          // verified running child in that recent window can keep an idle
+          // parent working; older task summaries are retained history, not a
+          // fresh child read. Other recent replies may follow a live task.
+          messages.reversed
+              .take(10)
+              .any(
+                (m) =>
+                    m.parts?.any(
+                      (p) =>
+                          p.task?.background == true &&
+                          p.task?.status == 'running' &&
+                          p.task?.sessionId != null,
+                    ) ==
+                    true,
+              ));
 
   void _schedulePoll() {
     _poll?.cancel();
@@ -393,6 +404,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   bool get canFork =>
       _canManageChat &&
       status == 'idle' &&
+      messages.isNotEmpty &&
       _forkNotice == null &&
       repository.chatSupports(connectorId, 'chat.fork');
   bool get canDeleteCurrentChat =>

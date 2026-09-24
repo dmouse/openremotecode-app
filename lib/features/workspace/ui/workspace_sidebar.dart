@@ -26,7 +26,7 @@ class WorkspaceSidebar extends StatelessWidget {
       Padding(
         padding: EdgeInsets.fromLTRB(28, 28, 28, 32),
         child: Text(
-          'Open Remote Code',
+          'Remote',
           style: TextStyle(
             color: AppTheme.ink,
             fontSize: 20,

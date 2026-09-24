@@ -68,7 +68,7 @@ void main() {
     },
   );
   testWidgets(
-    'running reasoning shows Thinking and spinner despite idle aggregate status and missing clocks',
+    'idle status does not animate retained running reasoning or tools',
     (tester) async {
       final repo = _Repository();
       final model = ChatViewModel(repo, 'connector')
@@ -82,17 +82,23 @@ void main() {
       );
       await show();
       await tester.pump();
-      expect(find.text('Thinking…'), findsOneWidget);
+      expect(find.text('Thinking… · last known'), findsOneWidget);
       expect(
         tester.widget<ActivitySpinner>(find.byType(ActivitySpinner)).running,
         isTrue,
       );
-      expect(find.byType(TypingIndicator), findsOneWidget);
+      expect(find.byType(TypingIndicator), findsNothing);
       expect(
         tester.binding.transientCallbackCount,
-        1,
-        reason: 'Dots and thought share one clock',
+        0,
+        reason: 'Historical work must not keep an animation clock live',
       );
+      model.conversation.status = 'busy';
+      await show();
+      await tester.pump();
+      expect(find.text('Thinking…'), findsOneWidget);
+      expect(find.byType(TypingIndicator), findsOneWidget);
+      expect(tester.binding.transientCallbackCount, 1);
       model.conversation.messages = [thought('running', 'Live preview')];
       await show();
       await tester.pump();
@@ -133,9 +139,10 @@ void main() {
       await tester.pump();
       expect(
         tester.widget<ActivitySpinner>(find.byType(ActivitySpinner)).running,
-        isTrue,
+        isFalse,
       );
-      expect(find.byType(TypingIndicator), findsOneWidget);
+      expect(find.byType(TypingIndicator), findsNothing);
+      expect(tester.binding.transientCallbackCount, 0);
       model.conversation.messages = [thought('completed', 'Live preview')];
       model.conversation.status = 'idle';
       await show();
@@ -148,6 +155,80 @@ void main() {
       await repo.changes.close();
     },
   );
+
+  testWidgets('an older running part cannot keep a finished chat working', (
+    tester,
+  ) async {
+    final repo = _Repository();
+    final model = ChatViewModel(repo, 'connector')
+      ..conversation.status = 'idle'
+      ..conversation.messages = [
+        thought('running'),
+        const ChatMessage('reply', 'assistant', 'Done', false),
+      ];
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: ConversationView(model: model.conversation))),
+    );
+    await tester.pump();
+    expect(model.conversation.isWorking, isFalse);
+    expect(find.byType(TypingIndicator), findsNothing);
+    expect(tester.binding.transientCallbackCount, 0);
+    await tester.pumpWidget(const SizedBox());
+    model.dispose();
+    await repo.changes.close();
+  });
+
+  testWidgets('only a recent verified background subtask can keep an idle parent working', (
+    tester,
+  ) async {
+    final repo = _Repository();
+    const task = ChatMessage(
+      'task',
+      'assistant',
+      '',
+      false,
+      parts: [
+        ChatMessagePart(
+          'child',
+          'subtask',
+          '',
+          task: ChatSubtask(
+            title: 'Research',
+            agent: 'explore',
+            status: 'running',
+            background: true,
+            sessionId: 'ses_child',
+          ),
+        ),
+      ],
+    );
+    final model = ChatViewModel(repo, 'connector')
+      ..conversation.status = 'idle'
+      ..conversation.messages = [task];
+    Future<void> show() => tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: ConversationView(model: model.conversation))),
+    );
+    await show();
+    expect(model.conversation.isWorking, isTrue);
+    expect(find.byType(TypingIndicator), findsOneWidget);
+    model.conversation.messages = [
+      task,
+      const ChatMessage('later', 'assistant', 'Done', false),
+    ];
+    await show();
+    expect(model.conversation.isWorking, isTrue);
+    model.conversation.messages = [
+      task,
+      for (var i = 0; i < 10; i++)
+        ChatMessage('later-$i', 'assistant', 'Done', false),
+    ];
+    await show();
+    expect(model.conversation.isWorking, isFalse);
+    expect(find.byType(TypingIndicator), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    model.dispose();
+    await repo.changes.close();
+  });
 
   testWidgets(
     'animation gates keep known running thoughts last-known rather than completed',

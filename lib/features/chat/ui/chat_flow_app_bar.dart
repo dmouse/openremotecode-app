@@ -126,7 +126,12 @@ class ChatFlowAppBar {
                 PopupMenuItem(
                   enabled: false,
                   child: Text(
-                    'Restart OpenCode with the updated Remote plugin to enable these actions.',
+                    conversation.repository.chatSupports(
+                          conversation.connectorId,
+                          'chat.fork',
+                        )
+                        ? 'Rename is not supported by this connector.'
+                        : 'Restart OpenCode with the updated Remote plugin to enable these actions.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),

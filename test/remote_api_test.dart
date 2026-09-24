@@ -6,6 +6,13 @@ import 'package:openremotecode/features/server_settings/domain/server_endpoint.d
 import 'package:openremotecode/platform/remote_api.dart';
 
 void main() {
+  test('a disposable email rejection tells the user to change the address', () {
+    expect(
+      const ApiException(400, 'disposable_email').message,
+      contains('permanent address'),
+    );
+  });
+
   test('HTTP adapter surfaces safe errors without forwarding credentials on redirect', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));

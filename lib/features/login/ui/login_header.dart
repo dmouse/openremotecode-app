@@ -16,7 +16,7 @@ class LoginHeader extends StatelessWidget {
         children: [
           Icon(Icons.terminal_rounded, size: 26, color: AppTheme.ink),
           Text(
-            'Open Remote Code',
+            'Remote',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
