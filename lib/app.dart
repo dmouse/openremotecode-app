@@ -101,7 +101,7 @@ class _MainAppState extends State<MainApp> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Open Remote Code',
+    title: 'Remote',
     navigatorKey: _navigatorKey,
     debugShowCheckedModeBanner: false,
     theme: AppTheme.light,

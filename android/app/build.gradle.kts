@@ -37,7 +37,7 @@ android {
         if (integrationApp) {
             applicationIdSuffix = ".integration"
         }
-        manifestPlaceholders["appLabel"] = if (integrationApp) "Open Remote Code tests" else "Open Remote Code"
+        manifestPlaceholders["appLabel"] = if (integrationApp) "Remote tests" else "Remote"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
