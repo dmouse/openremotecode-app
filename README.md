@@ -114,7 +114,7 @@ does not need its pairing keys to revoke it.
 The white Connections home lists authorized connectors, puts online peers first,
 and retains offline peers. Unknown presence and identities requiring verification
 are labeled explicitly. Add connection accepts one short typed or pasted code.
-Compare the safety code with OpenCode, then explicitly confirm matching codes.
+Compare the safety code with OpenCode. If they match, approve the phone in OpenCode's dialog, then explicitly confirm in the app; confirmation waits for that approval.
 An existing account connection may say Verification required when this device has
 never paired with it. The current plugin has no add-another-device action while
 already paired; that flow remains to be implemented. Do not treat account login
@@ -173,7 +173,15 @@ pairing. Uninstall/clear-data creates a new device and requires pairing again.
 
 Read [architecture requirements](AGENTS.md), [design conventions](docs/design.md),
 and [authentication and pairing threat analysis](docs/adr/0002-native-auth-and-pairing.md).
-Rendered Flutter design previews (sample data): [login](docs/previews/login.png),
-[connections](docs/previews/connections.png), [code entry](docs/previews/pairing-code.png),
-and [safety verification](docs/previews/pairing-safety.png).
+Rendered Flutter design previews (synthetic sample data):
+[login](docs/previews/login.png), [server address](docs/previews/server-settings.png),
+[registration](docs/previews/registration.png), [email verification](docs/previews/verify-email.png),
+[empty connections](docs/previews/workspace.png), [navigation](docs/previews/workspace-sidebar.png),
+[code entry](docs/previews/pairing-code.png), [safety verification](docs/previews/pairing-safety.png),
+[connections](docs/previews/connections.png), [settings](docs/previews/settings.png),
+[projects](docs/previews/projects.png), [chats](docs/previews/chats.png),
+[conversation](docs/previews/chat-thoughts.png), [sub-agent task](docs/previews/chat-subtasks.png),
+and [child conversation](docs/previews/subtask-chat.png).
+Regenerate them all with `flutter test tool/render_previews_test.dart`
+(`PREVIEW_DIR` overrides the output directory); re-run it after any UI change.
 The root pnpm scripts do not run Flutter checks.
