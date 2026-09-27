@@ -61,7 +61,9 @@ final class DeviceIdentityStore {
   DeviceIdentityStore(this.store, this.scope);
   final SecureStore store;
   final String scope;
-  String get key => 'device_v1_${sha256.convert(utf8.encode(scope))}';
+  String get key => keyFor(scope);
+  static String keyFor(String scope) =>
+      'device_v1_${sha256.convert(utf8.encode(scope))}';
 
   Future<Map<String, dynamic>> loadOrCreate() async {
     String? existing;

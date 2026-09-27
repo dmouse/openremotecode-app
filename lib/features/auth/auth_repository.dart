@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../../platform/google_identity.dart';
 import '../../platform/remote_api.dart';
 import '../../platform/secure_store.dart';
+import '../connections/data/device_identity.dart';
 import '../server_settings/domain/server_endpoint.dart';
 import 'auth_session.dart';
 import 'verification_challenge.dart';
@@ -27,6 +28,7 @@ final class AuthRepository extends ChangeNotifier {
   bool _busy = false;
   bool _disposed = false;
   String? _error;
+  String? _deletionError;
   Future<void>? _refreshing;
   int _generation = 0;
 
@@ -34,6 +36,10 @@ final class AuthRepository extends ChangeNotifier {
   VerificationChallenge? get pendingVerification => _pendingVerification;
   bool get isBusy => _busy;
   String? get error => _error;
+
+  /// Why the last [deleteAccount] attempt failed. Kept apart from [error] because
+  /// it belongs to the confirmation dialog, not to the screen behind it.
+  String? get deletionError => _deletionError;
   static String storageKey(ServerEndpoint server) =>
       'session_v1_${sha256.convert(utf8.encode(server.toString()))}';
 
@@ -378,6 +384,101 @@ final class AuthRepository extends ChangeNotifier {
       _busy = false;
       _notify();
     }
+  }
+
+  /// Permanently deletes the signed-in account. The server requires a fresh proof
+  /// of the account's own credential: [password], or, when [password] is null, a
+  /// Google assertion requested here. Returns false for a cancelled Google prompt
+  /// without setting an error, exactly as sign-in does.
+  ///
+  /// On success every secret this installation holds for the account scope — the
+  /// refresh credential and the device private key — is removed before the session
+  /// ends, so nothing is left behind for an account that no longer exists.
+  Future<bool> deleteAccount({String? password}) async {
+    final initial = _session;
+    if (initial == null || _busy || _disposed) return false;
+    final provider = google;
+    if (password == null && provider == null) return false;
+    _deletionError = null;
+    try {
+      await refreshIfNeeded();
+    } catch (error) {
+      // An ended session has already signed out and said so through [error].
+      if (_session != null) _deletionError = _message(error);
+      _notify();
+      return false;
+    }
+    final session = _session;
+    if (session == null || session.scope != initial.scope || _busy) {
+      return false;
+    }
+    _busy = true;
+    _notify();
+    try {
+      final Map<String, Object?> proof;
+      if (password != null) {
+        proof = {'password': password};
+      } else {
+        switch (await provider!.requestIdToken()) {
+          case GoogleIdentityCancelled():
+            return false;
+          case GoogleIdentityFailure(:final message):
+            _deletionError = message;
+            return false;
+          case GoogleIdentityToken(:final idToken):
+            proof = {'idToken': idToken};
+        }
+      }
+      if (_session?.scope != session.scope) return false;
+      await api.request(
+        session.server,
+        '/v1/account/delete',
+        method: 'POST',
+        body: proof,
+        accessToken: session.accessToken,
+      );
+      await _forgetAccount(session);
+      return true;
+    } on ApiException catch (error) {
+      if (error.status == 401) {
+        _busy = false;
+        await _invalidate();
+        return false;
+      }
+      _deletionError = switch (error.code) {
+        'reauthentication_failed' =>
+          password != null
+              ? 'That password is incorrect.'
+              : 'That Google account is not the one linked to this account.',
+        _ => error.message,
+      };
+      return false;
+    } catch (_) {
+      _deletionError = 'Could not delete the account. Please try again.';
+      return false;
+    } finally {
+      _busy = false;
+      _notify();
+    }
+  }
+
+  /// Local cleanup after the server has deleted the account. The account is gone
+  /// whatever happens here, so a storage failure is not reported as a failed
+  /// deletion; the leftover records are unusable against the server.
+  Future<void> _forgetAccount(AuthSession session) async {
+    for (final key in [
+      storageKey(session.server),
+      DeviceIdentityStore.keyFor(session.scope),
+    ]) {
+      try {
+        await store.delete(key);
+      } catch (_) {}
+    }
+    _session = null;
+    _generation++;
+    try {
+      await google?.signOut();
+    } catch (_) {}
   }
 
   Future<Map<String, dynamic>?> _read(ServerEndpoint server) async {

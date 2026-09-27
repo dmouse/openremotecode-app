@@ -54,6 +54,7 @@ final class FakeRemoteApi implements RemoteApi {
   String correctVerificationCode = '123456';
   bool accountPending = false;
   int resends = 0;
+  int deletions = 0;
 
   /// Rejects only the federated route, so a test can drive account_link_required
   /// without also breaking the password and refresh paths.
@@ -81,6 +82,15 @@ final class FakeRemoteApi implements RemoteApi {
       throw googleFailure!;
     }
     if (path == '/v1/auth/logout') return const ApiResponse({});
+    if (path == '/v1/account/delete') {
+      if (body?['password'] == 'incorrect' ||
+          (body?.containsKey('idToken') ?? false) &&
+              body?['idToken'] != 'header.payload.signature') {
+        throw const ApiException(403, 'reauthentication_failed');
+      }
+      deletions++;
+      return const ApiResponse({});
+    }
     if (path == '/v1/connectors') return const ApiResponse({'connectors': []});
     if (path == '/v1/account') return ApiResponse({'user': user});
     if (body?['password'] == 'incorrect') {
