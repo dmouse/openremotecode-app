@@ -24,8 +24,53 @@ final _shellFixture = jsonDecode(
   File('../packages/protocol/test/fixtures/chat-shell-v1.json')
       .readAsStringSync(),
 ) as Map<String, dynamic>;
+final _v2ToolsFixture = jsonDecode(
+  File('../packages/protocol/test/fixtures/chat-v2-tools-v1.json')
+      .readAsStringSync(),
+) as Map<String, dynamic>;
 
 void main() {
+  testWidgets('V2 patch, read, fetch, execute and shell display shared summaries', (
+    tester,
+  ) async {
+    final source = jsonDecode(jsonEncode(_v2ToolsFixture['response']))
+        as Map<String, dynamic>;
+    final parts = source['parts'] as List<dynamic>;
+    for (var i = 0; i < parts.length; i++) {
+      parts[i]['id'] = 'part_$i';
+    }
+    final model = ChatViewModel(_Repository(), 'connector')
+      ..conversation.messages = [ChatMessage.parse(source)];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(body: ConversationView(model: model.conversation)),
+      ),
+    );
+    await tester.tap(find.byType(ToolRunView));
+    await tester.pumpAndSettle();
+    for (final description in [
+      'lib/example.dart',
+      'mobile/lib/main.dart',
+      'docs.example.test',
+      'Run code',
+      '"needle" in mobile/lib',
+    ]) {
+      expect(find.text(description), findsOneWidget);
+    }
+    expect(find.text("printf 'v2 shell\\n'"), findsNothing);
+    await tester.tap(find.descendant(
+      of: find.byType(ToolView).at(1),
+      matching: find.byType(TextButton),
+    ));
+    await tester.pump();
+    expect(find.text("printf 'v2 shell\\n'"), findsOneWidget);
+    expect(find.text('v2 shell\n'), findsOneWidget);
+    expect(find.textContaining('PRIVATE_', findRichText: true), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    model.dispose();
+  });
+
   test(
     'shell fixture parses with strict fields and a shared display budget',
     () {
