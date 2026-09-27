@@ -24,7 +24,11 @@ class MessageTickBar extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: model,
     builder: (context, _) {
-      final ids = userMessageIds(model.messages);
+      final ids = userMessageIds(
+        model.messages,
+        showThoughts: model.showThinkingMessages,
+        showImages: model.showImages,
+      );
       final state = conversationKey.currentState;
       if (ids.length < 2 || state == null) return const SizedBox.shrink();
       return ValueListenableBuilder<String?>(

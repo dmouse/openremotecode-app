@@ -18,6 +18,7 @@ import 'project_path_sheet.dart';
 import 'projects_view.dart';
 import 'rename_chat_dialog.dart';
 import 'todo_banner.dart';
+import '../../settings/settings_view_model.dart';
 
 class ChatFlowScreen extends StatefulWidget {
   const ChatFlowScreen({
@@ -25,6 +26,7 @@ class ChatFlowScreen extends StatefulWidget {
     required this.repository,
     required this.connectorId,
     required this.connectionName,
+    this.settings,
   }) : initialProject = null,
        initialChat = null,
        parentSessionId = null,
@@ -37,6 +39,7 @@ class ChatFlowScreen extends StatefulWidget {
     required this.initialChat,
     required this.parentSessionId,
     required this.subtaskDepth,
+    required this.settings,
   });
   final ChatRepository repository;
   final String connectorId, connectionName;
@@ -44,6 +47,7 @@ class ChatFlowScreen extends StatefulWidget {
   final RemoteChat? initialChat;
   final String? parentSessionId;
   final int subtaskDepth;
+  final SettingsViewModel? settings;
   @override
   State<ChatFlowScreen> createState() => _ChatFlowScreenState();
 }
@@ -54,6 +58,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
     widget.repository,
     widget.connectorId,
     parentSessionId: widget.parentSessionId,
+    settings: widget.settings,
   );
   final search = TextEditingController();
   final draft = TextEditingController();
@@ -379,6 +384,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
             repository: widget.repository,
             connectorId: widget.connectorId,
             connectionName: widget.connectionName,
+            settings: widget.settings,
             initialProject: project,
             parentSessionId: parent.id,
             subtaskDepth: widget.subtaskDepth + 1,

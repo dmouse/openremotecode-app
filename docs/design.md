@@ -14,7 +14,9 @@ its editor hidden behind six background/branding taps.
 
 Connections is the home destination. A left drawer opens from the menu button on
 phones; at 720 logical pixels or wider a 280-pixel sidebar stays visible.
-Settings displays the authenticated account and Sign out. The green indicator
+Settings displays app-wide, per-device Chat display switches for thinking
+messages and image previews, both on by default, followed by the authenticated
+account and Sign out. The green indicator
 shows the selected destination. Every screen shares one warm off-white
 background (`#F7F8F2`); app bars match it with no scroll tint, so white input
 fields and cards stand out against the page.
@@ -467,6 +469,19 @@ Thought rows use a compact 32-pixel minimum height and grow when text wraps.
 Confirmed running thoughts use the shared activity spinner in the same icon box;
 finished thoughts restore the psychology icon.
 They remain readable by screen readers as ordinary text.
+
+The Settings > Chat switch can hide Thought rows in every chat without changing
+what the connector sends or regrouping tool runs across hidden reasoning parts.
+The separate typing indicator remains visible to communicate ongoing work.
+When all message content is hidden by display settings, the empty state says
+so instead of inviting the user to start a conversation that already exists.
+Image previews have their own app-wide switch: turning it off immediately hides
+cached previews and omits `includeImages` from future snapshots and streams;
+the existing per-device preference survives upgrades. Chat details contains no
+display switches. These switches are presentation choices, not a security
+boundary: hidden reasoning and previously received images can remain in the
+app's bounded in-memory conversation state until it is discarded. Preferences
+store only booleans, never message content; the relay still cannot read it.
 
 Duration comes only from valid start/end timestamps. An unfinished final thought
 in the latest message says Thinking only while the connector is online and the

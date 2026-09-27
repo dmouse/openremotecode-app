@@ -11,6 +11,8 @@ import 'features/auth/auth_repository.dart';
 import 'features/connections/data/api_connections_repository.dart';
 import 'features/connections/data/connections_repository.dart';
 import 'features/workspace/ui/workspace_screen.dart';
+import 'features/settings/data/settings_repository.dart';
+import 'features/settings/settings_view_model.dart';
 import 'platform/google_identity.dart';
 import 'platform/remote_api.dart';
 import 'platform/secure_store.dart';
@@ -24,12 +26,14 @@ class MainApp extends StatefulWidget {
     this.serverSettingsRepository,
     this.authRepository,
     this.connectionsRepositoryFactory,
+    this.settingsRepository,
   });
 
   final ServerSettingsRepository? serverSettingsRepository;
   final AuthRepository? authRepository;
   final ConnectionsRepository Function(AuthRepository)?
   connectionsRepositoryFactory;
+  final SettingsRepository? settingsRepository;
 
   @override
   State<MainApp> createState() => _MainAppState();
@@ -38,6 +42,7 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   late final ServerSettingsViewModel _serverSettings;
   late final AuthRepository _auth;
+  late final SettingsViewModel _settings;
   bool _ready = false;
   bool _showRegistration = false;
   final _navigatorKey = GlobalKey<NavigatorState>();
@@ -69,6 +74,9 @@ class _MainAppState extends State<MainApp> {
       defaultServer: AppConfig.defaultServer,
       allowLoopbackHttp: kDebugMode,
     );
+    _settings = SettingsViewModel(
+      widget.settingsRepository ?? PreferencesSettingsRepository(),
+    );
     _auth =
         widget.authRepository ??
         AuthRepository(
@@ -85,6 +93,7 @@ class _MainAppState extends State<MainApp> {
   }
 
   Future<void> _initialize() async {
+    await _settings.load();
     await _serverSettings.load();
     final endpoint = _serverSettings.endpoint;
     if (endpoint != null) await _auth.restore(endpoint);
@@ -93,6 +102,7 @@ class _MainAppState extends State<MainApp> {
 
   @override
   void dispose() {
+    _settings.dispose();
     _serverSettings.dispose();
     _auth.removeListener(_sessionChanged);
     if (widget.authRepository == null) _auth.dispose();
@@ -124,6 +134,7 @@ class _MainAppState extends State<MainApp> {
                       widget.connectionsRepositoryFactory?.call(_auth) ??
                       ApiConnectionsRepository(_auth),
                   auth: _auth,
+                  settings: _settings,
                 );
               }
               // An outstanding challenge takes precedence over both auth screens:

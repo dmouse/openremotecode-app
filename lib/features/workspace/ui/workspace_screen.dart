@@ -2,17 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../ui/core/app_button.dart';
 import '../../../ui/core/app_theme.dart';
-import '../../../ui/core/inline_notice.dart';
 import '../../auth/auth_repository.dart';
 import '../../auth/ui/delete_account_dialog.dart';
+import '../../settings/data/settings_repository.dart';
+import '../../settings/settings_view_model.dart';
 import '../../connections/connections_view_model.dart';
 import '../../connections/data/connections_repository.dart';
 import '../../connections/domain/remote_connection.dart';
 import '../../connections/ui/connections_screen.dart';
 import '../../connections/ui/pairing_sheet.dart';
 import 'workspace_sidebar.dart';
+import 'workspace_settings_view.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/ui/chat_flow_screen.dart';
 
@@ -21,9 +22,11 @@ class WorkspaceScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.auth,
+    this.settings,
   });
   final ConnectionsRepository repository;
   final AuthRepository auth;
+  final SettingsViewModel? settings;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -33,6 +36,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     with WidgetsBindingObserver {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   late final _connections = ConnectionsViewModel(widget.repository);
+  late final _settings =
+      widget.settings ?? SettingsViewModel(PreferencesSettingsRepository());
   bool _settingsSelected = false;
   bool _pairingOpen = false;
   bool _chatOpen = false;
@@ -59,6 +64,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
             repository: repository as ChatRepository,
             connectorId: connection.id,
             connectionName: connection.name,
+            settings: _settings,
           ),
         ),
       );
@@ -71,6 +77,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.settings == null) unawaited(_settings.load());
     unawaited(_connections.load());
   }
 
@@ -87,6 +94,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _connections.dispose();
+    if (widget.settings == null) _settings.dispose();
     super.dispose();
   }
 
@@ -138,47 +146,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
         onConnectionsSelected: () => _select(false),
       );
       final content = _settingsSelected
-          ? ListenableBuilder(
-              listenable: widget.auth,
-              builder: (context, _) => ListView(
-                key: const ValueKey('settings-content'),
-                padding: const EdgeInsets.all(24),
-                children: [
-                  Text(
-                    'Account',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(widget.auth.session?.email ?? ''),
-                  const SizedBox(height: 24),
-                  if (widget.auth.error case final error?) ...[
-                    InlineNotice(message: error, isError: true),
-                    const SizedBox(height: 16),
-                  ],
-                  AppButton.secondary(
-                    onPressed: widget.auth.logout,
-                    isLoading: widget.auth.isBusy,
-                    loadingLabel: 'Signing out',
-                    icon: Icons.logout,
-                    label: 'Sign out',
-                  ),
-                  const SizedBox(height: 32),
-                  const Divider(),
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: TextButton.icon(
-                      key: const ValueKey('delete-account'),
-                      onPressed: widget.auth.isBusy ? null : _deleteAccount,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                      ),
-                      icon: const Icon(Icons.delete_forever_outlined),
-                      label: const Text('Delete account'),
-                    ),
-                  ),
-                ],
-              ),
+          ? WorkspaceSettingsView(
+              auth: widget.auth,
+              settings: _settings,
+              onDeleteAccount: _deleteAccount,
             )
           : ConnectionsScreen(
               key: const ValueKey('workspace-content'),

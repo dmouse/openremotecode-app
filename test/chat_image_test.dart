@@ -5,12 +5,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openremotecode/features/chat/chat_view_model.dart';
-import 'package:openremotecode/features/chat/data/chat_image_preferences.dart';
 import 'package:openremotecode/features/chat/data/chat_repository.dart';
 import 'package:openremotecode/features/chat/domain/chat_models.dart';
 import 'package:openremotecode/features/chat/ui/conversation_view.dart';
 import 'package:openremotecode/features/chat/ui/image_message.dart';
 import 'package:openremotecode/ui/core/app_theme.dart';
+import 'package:openremotecode/features/settings/data/settings_repository.dart';
+import 'package:openremotecode/features/settings/settings_view_model.dart';
 
 final _fixture = jsonDecode(
   File('../packages/protocol/test/fixtures/chat-image-v1.json')
@@ -153,7 +154,8 @@ void main() {
   test('includeImages is requested only with both the negotiated capability and the on-device preference', () async {
     final prefs = _Preferences(true);
     final repo = _Repository();
-    final model = ChatViewModel(repo, 'connector', imagePreferences: prefs);
+    final settings = SettingsViewModel(prefs);
+    final model = ChatViewModel(repo, 'connector', settings: settings);
     await model.refresh();
     await model.openProject(model.projects.projects.single);
     await model.openChat(model.chatList.chats.single);
@@ -164,14 +166,15 @@ void main() {
     expect(repo.requests.last['includeImages'], isTrue);
 
     // Flip the on-device preference off: the capability alone is not enough.
-    await model.conversation.setShowImages(false);
+    await settings.setShowImages(false);
     expect(model.conversation.showImages, isFalse);
     expect(prefs.value, isFalse);
     expect(repo.requests.last.containsKey('includeImages'), isFalse);
 
-    await model.conversation.setShowImages(true);
+    await settings.setShowImages(true);
     expect(repo.requests.last['includeImages'], isTrue);
     model.dispose();
+    settings.dispose();
   });
 
   test(
@@ -179,19 +182,21 @@ void main() {
     () async {
       final prefs = _Preferences(false);
       final repo = _Repository()..images = true;
-      final model = ChatViewModel(repo, 'connector', imagePreferences: prefs);
-      await Future<void>.delayed(Duration.zero); // let the async load settle
+      final settings = SettingsViewModel(prefs);
+      await settings.load();
+      final model = ChatViewModel(repo, 'connector', settings: settings);
       expect(model.conversation.showImages, isFalse);
       await model.refresh();
       await model.openProject(model.projects.projects.single);
       await model.openChat(model.chatList.chats.single);
       expect(repo.requests.last.containsKey('includeImages'), isFalse);
       model.dispose();
+      settings.dispose();
     },
   );
 }
 
-class _Preferences implements ChatImagePreferences {
+class _Preferences implements SettingsRepository {
   _Preferences(this.value);
   bool value;
   int writes = 0;
@@ -202,6 +207,11 @@ class _Preferences implements ChatImagePreferences {
     value = next;
     writes++;
   }
+
+  @override
+  Future<bool> readShowThinkingMessages() async => true;
+  @override
+  Future<void> writeShowThinkingMessages(bool next) async {}
 }
 
 class _Repository implements ChatRepository {

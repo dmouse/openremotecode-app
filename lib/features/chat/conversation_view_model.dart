@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import '../../platform/remote_api.dart';
 import 'chat_list_view_model.dart';
 import 'chat_request_scope.dart';
-import 'data/chat_image_preferences.dart';
 import 'data/chat_repository.dart';
 import 'data/chat_stream.dart';
 import 'domain/chat_models.dart';
@@ -38,12 +37,10 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     required this.isConversationPage,
     required this.canRefresh,
     required this.leaveConversationPage,
-    ChatImagePreferences? imagePreferences,
-  }) : models = ModelSelectionViewModel(repository, connectorId),
-       _imagePreferences =
-           imagePreferences ?? PreferencesChatImagePreferences() {
+    required this.readShowImages,
+    required this.readShowThinkingMessages,
+  }) : models = ModelSelectionViewModel(repository, connectorId) {
     models.addListener(notifyListeners);
-    unawaited(_loadShowImages());
     _stream = ChatStream(repository, connectorId, _streamSnapshot, () {
       if (!_disposed) {
         _schedulePoll();
@@ -97,7 +94,8 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   final void Function() leaveConversationPage;
 
   final ModelSelectionViewModel models;
-  final ChatImagePreferences _imagePreferences;
+  final bool Function() readShowImages;
+  final bool Function() readShowThinkingMessages;
   late final ChatStream _stream;
 
   bool _disposed = false;
@@ -154,33 +152,8 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     });
   }
 
-  bool _showImages = true;
-  bool get showImages => _showImages;
-  Future<void> _loadShowImages() async {
-    bool value;
-    try {
-      value = await _imagePreferences.readShowImages();
-    } catch (_) {
-      // Platform storage may be unavailable (e.g. a cold start race or a
-      // host without the plugin registered); keep the safe default.
-      return;
-    }
-    if (_disposed || value == _showImages) return;
-    _showImages = value;
-    notifyListeners();
-  }
-
-  Future<void> setShowImages(bool value) async {
-    if (value == _showImages) return;
-    _showImages = value;
-    notifyListeners();
-    try {
-      await _imagePreferences.writeShowImages(value);
-    } catch (_) {
-      // Best-effort persistence; the in-memory choice above still applies.
-    }
-    if (!_disposed && online() && chat != null) await snapshot(quiet: true);
-  }
+  bool get showImages => readShowImages();
+  bool get showThinkingMessages => readShowThinkingMessages();
 
   /// Stops the live stream/poll (e.g. the app is backgrounded or the screen
   /// is covered for security) and resumes with a fresh read when uncovered.
@@ -596,7 +569,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
           'includeShell': true,
         if (repository.chatSupports(connectorId, 'chat.activities'))
           'includeActivities': true,
-        if (_showImages && repository.chatSupports(connectorId, 'chat.images'))
+        if (showImages && repository.chatSupports(connectorId, 'chat.images'))
           'includeImages': true,
         if (repository.chatSupports(connectorId, 'chat.permissions'))
           'includePermissions': true,
@@ -668,7 +641,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
           'includeShell': true,
         if (repository.chatSupports(connectorId, 'chat.activities'))
           'includeActivities': true,
-        if (_showImages && repository.chatSupports(connectorId, 'chat.images'))
+        if (showImages && repository.chatSupports(connectorId, 'chat.images'))
           'includeImages': true,
         if (repository.chatSupports(connectorId, 'chat.permissions'))
           'includePermissions': true,

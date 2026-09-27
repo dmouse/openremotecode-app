@@ -170,6 +170,32 @@ void main() {
       expect(pureToolMessageRuns(messages), [(0, 1), (5, 7)]);
     });
 
+    test('hidden thoughts do not merge otherwise separate tool messages', () {
+      final original = [
+        toolMessage('a'),
+        ChatMessage(
+          'thought',
+          'assistant',
+          '',
+          false,
+          parts: [const ChatMessagePart('r', 'reasoning', 'thinking')],
+        ),
+        const ChatMessage('blank', 'assistant', ' ', false),
+        toolMessage('b'),
+      ];
+      final displayed = visibleMessages(original, showThoughts: false);
+      final originalOrder = {
+        for (final (index, message) in visibleMessages(original).indexed)
+          message.id: index,
+      };
+      expect(displayed.map((message) => message.id), ['a', 'b']);
+      expect(
+        pureToolMessageRuns(displayed, originalOrder: originalOrder),
+        isEmpty,
+      );
+      expect(findToolRun(original, 'a', 'a'), isNull);
+    });
+
     test(
       'visibleMessages drops blank projected records but keeps truncated ones',
       () {

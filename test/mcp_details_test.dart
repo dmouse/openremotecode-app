@@ -39,38 +39,19 @@ void main() {
         matching: find.byType(Divider, skipOffstage: false),
         skipOffstage: false,
       );
-      expect(dividers, findsNWidgets(3));
+      expect(dividers, findsNWidgets(2));
       final positions = [
         tester.getTopLeft(find.text('Fixture chat')).dy,
         tester.getTopLeft(dividers.at(0)).dy,
         tester.getTopLeft(find.text('MCP servers')).dy,
         tester.getTopLeft(dividers.at(1)).dy,
-        tester.getTopLeft(find.text('Show image previews')).dy,
-        tester.getTopLeft(dividers.at(2)).dy,
       ];
       expect(positions, orderedEquals([...positions]..sort()));
       expect(
         tester.widget<Text>(find.text('Fixture chat')).textAlign,
         TextAlign.center,
       );
-      // The toggle label reads at the MCP server list's text size, not a
-      // tile's larger default, with a bolder weight and a smaller description.
-      final body = Theme.of(tester.element(find.byType(ChatDetailsScreen)))
-          .textTheme
-          .bodyMedium!
-          .fontSize!;
-      final label = tester
-          .widget<Text>(find.text('Show image previews'))
-          .style!;
-      expect(label.fontSize, body);
-      expect(label.fontWeight, FontWeight.w600);
-      final description = tester
-          .widget<Text>(
-            find.text('Preview photos and screenshots inline in this chat.'),
-          )
-          .style!;
-      expect(description.fontSize, lessThan(body));
-      expect(description.fontWeight, isNot(FontWeight.w600));
+      expect(find.text('Show image previews'), findsNothing);
       for (final divider in tester.widgetList<Divider>(dividers)) {
         expect(divider.thickness, 1);
         expect(divider.color, AppTheme.border);

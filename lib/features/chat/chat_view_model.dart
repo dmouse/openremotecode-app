@@ -5,10 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'chat_list_view_model.dart';
 import 'chat_request_scope.dart';
 import 'conversation_view_model.dart';
-import 'data/chat_image_preferences.dart';
 import 'data/chat_repository.dart';
 import 'domain/chat_models.dart';
 import 'projects_view_model.dart';
+import '../settings/data/settings_repository.dart';
+import '../settings/settings_view_model.dart';
 
 export 'conversation_view_model.dart' show ConversationViewModel, PromptMode;
 
@@ -27,8 +28,12 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
     this.repository,
     this.connectorId, {
     this.parentSessionId,
-    ChatImagePreferences? imagePreferences,
-  }) {
+    SettingsViewModel? settings,
+  }) : _settings =
+           settings ?? SettingsViewModel(PreferencesSettingsRepository()),
+       _ownsSettings = settings == null {
+    if (_ownsSettings) unawaited(_settings.load());
+    _lastShowImages = _settings.showImages;
     _online = repository.chatOnline(connectorId);
     projects = ProjectsViewModel(repository, connectorId);
     chatList = ChatListViewModel(
@@ -61,8 +66,10 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       isConversationPage: () => page == ChatPage.conversation,
       canRefresh: () => canRefresh,
       leaveConversationPage: () => page = ChatPage.chats,
-      imagePreferences: imagePreferences,
+      readShowImages: () => _settings.showImages,
+      readShowThinkingMessages: () => _settings.showThinkingMessages,
     )..addListener(notifyListeners);
+    _settings.addListener(_settingsChanged);
     _credentialEvents = repository.chatEvents.listen((event) {
       if (_disposed ||
           event.connectorId != connectorId ||
@@ -123,6 +130,27 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       // position on every reconnect (including routine relay lease renewal).
       if (nowOnline && _active) unawaited(refresh(resetHistory: false));
     });
+  }
+
+  final SettingsViewModel _settings;
+  final bool _ownsSettings;
+  late bool _lastShowImages;
+
+  void _settingsChanged() {
+    if (_disposed) return;
+    final imagesChanged = _lastShowImages != _settings.showImages;
+    _lastShowImages = _settings.showImages;
+    // ChatViewModel listens to the conversation, not the other way around.
+    // Notify it directly so a standalone ConversationView also rebuilds.
+    conversation.notifyExternalChange();
+    if (imagesChanged &&
+        conversation.chat != null &&
+        conversation.isConversationPage() &&
+        conversation.active() &&
+        conversation.online() &&
+        !conversation.trustLost()) {
+      unawaited(conversation.snapshot(quiet: true));
+    }
   }
 
   final ChatRepository repository;
@@ -402,12 +430,14 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
 
   @override
   void dispose() {
+    _settings.removeListener(_settingsChanged);
     unawaited(_credentialEvents.cancel());
     _disposed = true;
     invalidate();
     _subscription.cancel();
     chatList.dispose();
     conversation.dispose();
+    if (_ownsSettings) _settings.dispose();
     super.dispose();
   }
 }

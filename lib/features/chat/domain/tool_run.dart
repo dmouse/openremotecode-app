@@ -138,14 +138,21 @@ bool isPureToolMessage(ChatMessage message) =>
 /// phantom gap or break a run of activity rows. Shared between the message
 /// list's own rendering and [findToolRun]'s live re-derivation so both agree
 /// on which messages are adjacent.
-List<ChatMessage> visibleMessages(Iterable<ChatMessage> messages) => messages
+List<ChatMessage> visibleMessages(
+  Iterable<ChatMessage> messages, {
+  bool showThoughts = true,
+  bool showImages = true,
+}) => messages
     .where(
       (message) =>
           message.truncated ||
           (message.parts == null
               ? message.text.trim().isNotEmpty
               : message.parts!.any(
-                  (part) => part.type != 'text' || part.text.trim().isNotEmpty,
+                  (part) =>
+                      (showThoughts || !part.isReasoning) &&
+                      (showImages || !part.isImage) &&
+                      (part.type != 'text' || part.text.trim().isNotEmpty),
                 )),
     )
     .toList();
@@ -153,14 +160,25 @@ List<ChatMessage> visibleMessages(Iterable<ChatMessage> messages) => messages
 /// Ids of the user's own prompts, oldest first, filtered through
 /// [visibleMessages] so a tick-bar-style index only ever points at a message
 /// that actually has a rendered row (and therefore an anchor) to scroll to.
-List<String> userMessageIds(Iterable<ChatMessage> messages) => [
-  for (final message in visibleMessages(messages))
+List<String> userMessageIds(
+  Iterable<ChatMessage> messages, {
+  bool showThoughts = true,
+  bool showImages = true,
+}) => [
+  for (final message in visibleMessages(
+    messages,
+    showThoughts: showThoughts,
+    showImages: showImages,
+  ))
     if (message.role == 'user') message.id,
 ];
 
 /// Index ranges (inclusive, oldest-first) of maximal runs of two or more
 /// consecutive [isPureToolMessage] messages in [messages].
-List<(int, int)> pureToolMessageRuns(List<ChatMessage> messages) {
+List<(int, int)> pureToolMessageRuns(
+  List<ChatMessage> messages, {
+  Map<String, int>? originalOrder,
+}) {
   final runs = <(int, int)>[];
   var i = 0;
   while (i < messages.length) {
@@ -169,7 +187,11 @@ List<(int, int)> pureToolMessageRuns(List<ChatMessage> messages) {
       continue;
     }
     var end = i;
-    while (end + 1 < messages.length && isPureToolMessage(messages[end + 1])) {
+    while (end + 1 < messages.length &&
+        isPureToolMessage(messages[end + 1]) &&
+        (originalOrder == null ||
+            originalOrder[messages[end + 1].id] ==
+                (originalOrder[messages[end].id] ?? -2) + 1)) {
       end++;
     }
     if (end > i) runs.add((i, end));

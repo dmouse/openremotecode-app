@@ -157,7 +157,7 @@ class ConversationViewState extends State<ConversationView> {
   /// that triggered this).
   void scrollToMessage(String messageId) {
     if (!_scroll.hasClients || !_scroll.position.hasContentDimensions) return;
-    final ids = [for (final m in visibleMessages(model.messages)) m.id];
+    final ids = [for (final m in _visibleMessages()) m.id];
     if (!ids.contains(messageId)) return;
     final position = _scroll.position;
     _pendingScrollTarget = messageId;
@@ -179,7 +179,7 @@ class ConversationViewState extends State<ConversationView> {
     if (!_scroll.hasClients || !_scroll.position.hasContentDimensions) {
       return null;
     }
-    final ids = [for (final m in visibleMessages(model.messages)) m.id];
+    final ids = [for (final m in _visibleMessages()) m.id];
     final index = ids.indexOf(messageId);
     if (index < 0) return null;
     final position = _scroll.position;
@@ -228,7 +228,7 @@ class ConversationViewState extends State<ConversationView> {
   void _refinePendingScroll() {
     final target = _pendingScrollTarget;
     if (target == null) return;
-    final ids = [for (final m in visibleMessages(model.messages)) m.id];
+    final ids = [for (final m in _visibleMessages()) m.id];
     final targetIndex = ids.indexOf(target);
     if (targetIndex < 0) {
       _clearPendingScroll();
@@ -387,21 +387,19 @@ class ConversationViewState extends State<ConversationView> {
           if (!_expandedShells.remove(id)) _expandedShells.add(id);
         }),
         online: model.online(),
-        active:
-            model.activityLive &&
-            ['busy', 'retry'].contains(model.status),
+        active: model.activityLive && ['busy', 'retry'].contains(model.status),
       );
     }
     if (part.isReasoning) {
+      if (!model.showThinkingMessages) return null;
       return ThoughtView(
         key: ValueKey(part.id),
         part: part,
-        active:
-            model.activityLive &&
-            ['busy', 'retry'].contains(model.status),
+        active: model.activityLive && ['busy', 'retry'].contains(model.status),
       );
     }
     if (part.image case final image?) {
+      if (!model.showImages) return null;
       return Padding(
         key: ValueKey(part.id),
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -424,6 +422,12 @@ class ConversationViewState extends State<ConversationView> {
     return null;
   }
 
+  List<ChatMessage> _visibleMessages() => visibleMessages(
+    model.messages,
+    showThoughts: model.showThinkingMessages,
+    showImages: model.showImages,
+  );
+
   /// Plan mode's mark on the agent's side: a rule down the left of what the
   /// agent itself says, which is what identifies planning at a glance while
   /// scrolling. It hugs the prose alone. Thought rows and tool runs keep their
@@ -443,7 +447,12 @@ class ConversationViewState extends State<ConversationView> {
       : child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: model,
+    builder: (context, _) => _buildConversation(context),
+  );
+
+  Widget _buildConversation(BuildContext context) {
     final latest = model.messages.lastOrNull;
     final showTyping = model.isSending || model.isWorking;
     final credentialNotice = model.pendingCredentialNotice;
@@ -481,7 +490,7 @@ class ConversationViewState extends State<ConversationView> {
     }
     // Empty projected records (including synthetic-only shell user messages) must not
     // introduce phantom gaps or break a run of activity rows.
-    final messages = visibleMessages(model.messages);
+    final messages = _visibleMessages();
     // OpenCode commonly emits one tool call per assistant turn rather than
     // batching several into one message's parts array, so a run of
     // consecutive tool-only messages must be merged into a single
@@ -491,7 +500,16 @@ class ConversationViewState extends State<ConversationView> {
     // rest of that run's messages, already covered by the anchor's row.
     final mergedRuns = <String, ToolRun>{};
     final suppressedMessageIds = <String>{};
-    for (final (start, end) in pureToolMessageRuns(messages)) {
+    // Empty projected records never interrupted runs, but a thought/image
+    // hidden by settings still marks its original position between two tools.
+    final originalOrder = {
+      for (final (index, message) in visibleMessages(model.messages).indexed)
+        message.id: index,
+    };
+    for (final (start, end) in pureToolMessageRuns(
+      messages,
+      originalOrder: originalOrder,
+    )) {
       mergedRuns[messages[start].id] = ToolRun(
         List.unmodifiable([
           for (var j = start; j <= end; j++) ...messages[j].parts!,
@@ -615,9 +633,22 @@ class ConversationViewState extends State<ConversationView> {
                       model.earlierMessagesError == null &&
                       model.messageHistoryNotice == null &&
                       model.messageCursor == null)
-                    const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text('Start this conversation with a message.'),
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        model.messages.any(
+                              (message) =>
+                                  message.parts?.any(
+                                    (part) =>
+                                        (!model.showThinkingMessages &&
+                                            part.isReasoning) ||
+                                        (!model.showImages && part.isImage),
+                                  ) ??
+                                  false,
+                            )
+                            ? 'Some messages are hidden by your chat settings.'
+                            : 'Start this conversation with a message.',
+                      ),
                     ),
                 ],
               );
@@ -631,7 +662,10 @@ class ConversationViewState extends State<ConversationView> {
             bool activityEdge(ChatMessage value, {required bool first}) {
               if (value.role != 'assistant') return false;
               final visible = value.parts?.where(
-                (part) => part.type != 'text' || part.text.trim().isNotEmpty,
+                (part) =>
+                    (model.showThinkingMessages || !part.isReasoning) &&
+                    (model.showImages || !part.isImage) &&
+                    (part.type != 'text' || part.text.trim().isNotEmpty),
               );
               final edge = first ? visible?.firstOrNull : visible?.lastOrNull;
               return edge != null &&

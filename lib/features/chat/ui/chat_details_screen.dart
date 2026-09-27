@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../../ui/core/app_theme.dart';
@@ -126,12 +124,6 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen>
                         thickness: 1,
                         color: AppTheme.border,
                       ),
-                      _ImagePreviewToggle(model: model),
-                      const Divider(
-                        height: 40,
-                        thickness: 1,
-                        color: AppTheme.border,
-                      ),
                       ChatDetailsActions(model: model),
                     ],
                   ),
@@ -140,30 +132,4 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen>
       );
     },
   );
-}
-
-class _ImagePreviewToggle extends StatelessWidget {
-  const _ImagePreviewToggle({required this.model});
-  final ConversationViewModel model;
-
-  @override
-  Widget build(BuildContext context) {
-    // Match the MCP server list, which leaves its rows at the body text size
-    // rather than the larger default a list tile gives its title. Weight and a
-    // smaller explanation, not size, separate the label from its description.
-    final style = Theme.of(context).textTheme.bodyMedium;
-    return SwitchListTile.adaptive(
-      contentPadding: EdgeInsets.zero,
-      value: model.showImages,
-      onChanged: (value) => unawaited(model.setShowImages(value)),
-      title: Text(
-        'Show image previews',
-        style: style?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(
-        'Preview photos and screenshots inline in this chat.',
-        style: style?.copyWith(fontSize: 12),
-      ),
-    );
-  }
 }

@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openremotecode/features/workspace/ui/workspace_screen.dart';
+import 'package:openremotecode/features/settings/settings_view_model.dart';
 import 'package:openremotecode/ui/core/app_theme.dart';
 
 import 'support/auth_fakes.dart';
 import 'support/connections_fakes.dart';
+import 'support/memory_settings_repository.dart';
 
 void main() {
-  Future<void> mount(WidgetTester tester, Size size) async {
+  Future<void> mount(
+    WidgetTester tester,
+    Size size, {
+    SettingsViewModel? settings,
+  }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -18,6 +24,7 @@ void main() {
         home: WorkspaceScreen(
           repository: FakeConnectionsRepository(),
           auth: fakeAuth(),
+          settings: settings,
         ),
       ),
     );
@@ -86,5 +93,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('settings-content')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Chat settings are global, accessible and saved at large text', (
+    tester,
+  ) async {
+    final repository = MemorySettingsRepository(images: false);
+    final settings = SettingsViewModel(repository);
+    await settings.load();
+    await mount(tester, const Size(320, 640), settings: settings);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings-content')), findsOneWidget);
+    expect(find.text('Show thinking messages'), findsOneWidget);
+    expect(find.text('Show image previews'), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsNWidgets(2));
+    final tiles = tester
+        .widgetList<SwitchListTile>(find.byType(SwitchListTile))
+        .toList();
+    expect(tiles.map((tile) => tile.value), [true, false]);
+    await tester.ensureVisible(find.text('Show thinking messages'));
+    await tester.tap(find.text('Show thinking messages'));
+    await tester.pumpAndSettle();
+    expect(settings.showThinkingMessages, isFalse);
+    expect(repository.thinking, isFalse);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    settings.dispose();
   });
 }
