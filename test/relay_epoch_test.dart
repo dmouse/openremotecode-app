@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openremotecode/features/chat/data/chat_repository.dart';
 import 'package:openremotecode/features/chat/data/relay_crypto.dart';
+import 'package:openremotecode/features/connections/data/device_identity.dart';
 
 void main() {
   test('epoch derivation matches the shared cross-language fixture', () {
@@ -90,4 +93,44 @@ void main() {
 
     expect(window.accept(-1), isFalse);
   });
+
+  for (final operation in ['chat.permission.reply', 'chat.question.reply']) {
+    test('$operation has an uncertain outcome if the relay disconnects', () async {
+      final requests = RelayRequests(crypto: const _StubCrypto());
+      const peer = PublicIdentity(keyId: 'pinned-peer', publicKey: 'unused');
+      requests.connect(peerKeyId: peer.keyId, epoch: 'e' * 43);
+      final sent = Completer<void>();
+      final pending = requests.request(
+        operation: operation,
+        body: const {'version': 1},
+        identity: const {},
+        peer: peer,
+        send: (_) => sent.complete(),
+      );
+      await sent.future;
+      requests.disconnect(peerKeyId: peer.keyId);
+      await expectLater(pending, throwsA(ChatFailure.uncertain));
+    });
+  }
+}
+
+final class _StubCrypto implements RelayCrypto {
+  const _StubCrypto();
+
+  @override
+  Future<Map<String, dynamic>> seal(
+    Map<String, dynamic> own,
+    PublicIdentity peer,
+    Map<String, dynamic> payload,
+    String epoch,
+    int sequence,
+  ) async => {};
+
+  @override
+  Future<Map<String, dynamic>> open(
+    Map<String, dynamic> own,
+    PublicIdentity peer,
+    Map<String, dynamic> envelope,
+    String epoch,
+  ) => throw UnimplementedError();
 }
