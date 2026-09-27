@@ -6,9 +6,9 @@ The app's display name is **Open Remote Code**, its Dart package is
 `com.example.opremote` development app and requires fresh login and pairing.
 Existing installations can remain installed.
 
-The planned hosted API/relay origin is `https://api.openremotecode.com`.
-It is not a development default or a claim that the service is deployed.
-See [Naming and Planned Domains](../README.md#naming-and-planned-domains)
+The hosted API/relay origin for internal testing is `https://api.openremotecode.com`.
+It is not a development default or a claim of a public release.
+See [Naming and Service Hosts](../README.md#naming-and-service-hosts)
 for the landing page and API/relay hosts.
 
 Native Flutter client with real server authentication, secure session restoration,
@@ -124,8 +124,8 @@ The connector must also review the claim before confirmation succeeds.
 Private device keys, device credentials, and pinned public identities are scoped
 to both the server and account and stored securely. Existing keys cannot be
 silently replaced. Presence uses single-use relay tickets and suspends in the
-background. Chat/session browsing and encrypted message exchange are the next
-feature; connection cards currently show inventory and presence.
+background. Chat/session browsing and encrypted message exchange are available
+when a trusted connector is online; cards also show inventory and presence.
 
 ## Release versions
 
