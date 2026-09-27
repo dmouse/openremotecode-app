@@ -17,6 +17,10 @@ val integrationApp = providers.gradleProperty("openremotecodeIntegration").orNul
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 val hasReleaseSigning = keystorePropertiesFile.exists()
+val requireReleaseSigning = providers.gradleProperty("openremotecodeRequireReleaseSigning").orNull == "true"
+if (requireReleaseSigning && !hasReleaseSigning) {
+    error("Production release requires android/key.properties and the upload keystore")
+}
 if (hasReleaseSigning) {
     keystoreProperties.load(keystorePropertiesFile.inputStream())
 }
@@ -32,7 +36,6 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.openremotecode.app"
         if (integrationApp) {
             applicationIdSuffix = ".integration"

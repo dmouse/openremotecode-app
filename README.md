@@ -135,6 +135,10 @@ run number (Android's version code must only ever increase). The tag must be
 exactly `vMAJOR.MINOR.PATCH`; anything else fails the build before it starts.
 The `version:` in `pubspec.yaml` is only the default for local and CI test
 builds, so it does not need to be edited for a release.
+The workflow runs mobile analysis and tests first, requires the release signing
+secrets, and refuses a release destination other than the hosted HTTPS API.
+Before uploading, verify the generated version code exceeds the current Play
+Console version and confirm that Play recognizes the expected upload key.
 
 ## Verification
 

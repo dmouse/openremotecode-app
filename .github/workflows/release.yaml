@@ -9,7 +9,11 @@ permissions:
   contents: write
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yaml
+
   build-signed-apk:
+    needs: ci
     runs-on: ubuntu-latest
     # The signing secrets live on the release environment, not the repository.
     # Without this the secrets below resolve to empty strings.
@@ -66,7 +70,10 @@ jobs:
         working-directory: mobile/android
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: base64 --decode <<< "$ANDROID_KEYSTORE_BASE64" > release.keystore.jks
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo 'Missing Android signing key'; exit 1; }
+          base64 --decode <<< "$ANDROID_KEYSTORE_BASE64" > release.keystore.jks
+          test -s release.keystore.jks
 
       - name: Write key.properties
         working-directory: mobile/android
@@ -75,6 +82,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          test -n "$ANDROID_KEYSTORE_PASSWORD" && test -n "$ANDROID_KEY_ALIAS" && test -n "$ANDROID_KEY_PASSWORD" || { echo 'Missing signing configuration'; exit 1; }
           cat > key.properties <<EOF
           storeFile=release.keystore.jks
           storePassword=$ANDROID_KEYSTORE_PASSWORD
@@ -82,10 +90,17 @@ jobs:
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
 
+      - name: Verify public release destination
+        env:
+          REMOTE_SERVER_URL: ${{ vars.REMOTE_SERVER_URL }}
+        run: |
+          test "$REMOTE_SERVER_URL" = 'https://api.openremotecode.com' || { echo 'Release API origin must be the production HTTPS origin'; exit 1; }
+
       - name: Build signed release APK
         working-directory: mobile
         env:
           REMOTE_SERVER_URL: ${{ vars.REMOTE_SERVER_URL }}
+          ORG_GRADLE_PROJECT_openremotecodeRequireReleaseSigning: "true"
         run: >
           flutter build apk --release
           --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER"
@@ -95,6 +110,7 @@ jobs:
         working-directory: mobile
         env:
           REMOTE_SERVER_URL: ${{ vars.REMOTE_SERVER_URL }}
+          ORG_GRADLE_PROJECT_openremotecodeRequireReleaseSigning: "true"
         run: >
           flutter build appbundle --release
           --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER"
