@@ -6,6 +6,7 @@ import '../../../ui/core/app_button.dart';
 import '../../../ui/core/app_theme.dart';
 import '../../../ui/core/inline_notice.dart';
 import '../../auth/auth_repository.dart';
+import '../../auth/ui/delete_account_dialog.dart';
 import '../../connections/connections_view_model.dart';
 import '../../connections/data/connections_repository.dart';
 import '../../connections/domain/remote_connection.dart';
@@ -35,6 +36,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   bool _settingsSelected = false;
   bool _pairingOpen = false;
   bool _chatOpen = false;
+  bool _deleteOpen = false;
 
   Future<void> _openConnection(RemoteConnection connection) async {
     if (_chatOpen || _connections.isMutating) return;
@@ -93,6 +95,20 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     setState(() => _settingsSelected = settings);
   }
 
+  Future<void> _deleteAccount() async {
+    if (_deleteOpen || widget.auth.isBusy) return;
+    _deleteOpen = true;
+    try {
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DeleteAccountDialog(auth: widget.auth),
+      );
+    } finally {
+      _deleteOpen = false;
+    }
+  }
+
   Future<void> _addConnection() async {
     if (_pairingOpen || _connections.isMutating) return;
     _pairingOpen = true;
@@ -145,6 +161,21 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                     loadingLabel: 'Signing out',
                     icon: Icons.logout,
                     label: 'Sign out',
+                  ),
+                  const SizedBox(height: 32),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      key: const ValueKey('delete-account'),
+                      onPressed: widget.auth.isBusy ? null : _deleteAccount,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                      icon: const Icon(Icons.delete_forever_outlined),
+                      label: const Text('Delete account'),
+                    ),
                   ),
                 ],
               ),

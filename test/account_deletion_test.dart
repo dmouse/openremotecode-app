@@ -1,11 +1,15 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openremotecode/features/auth/auth_repository.dart';
 import 'package:openremotecode/features/connections/data/device_identity.dart';
 import 'package:openremotecode/features/server_settings/domain/server_endpoint.dart';
+import 'package:openremotecode/features/workspace/ui/workspace_screen.dart';
 import 'package:openremotecode/platform/google_identity.dart';
 import 'package:openremotecode/platform/remote_api.dart';
+import 'package:openremotecode/ui/core/app_theme.dart';
 
 import 'support/auth_fakes.dart';
+import 'support/connections_fakes.dart';
 
 void main() {
   final server = ServerEndpoint.parse('https://remote.example.com');
@@ -80,4 +84,68 @@ void main() {
       expect(auth.session, isNull);
     },
   );
+
+  testWidgets('settings confirms before deleting and requires the password', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: WorkspaceScreen(
+          repository: FakeConnectionsRepository(),
+          auth: auth,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('delete-account')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete account?'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.textContaining('person@example.com'),
+      ),
+      findsOneWidget,
+    );
+
+    // Cancelling deletes nothing.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(api.deletions, 0);
+
+    await tester.tap(find.byKey(const ValueKey('delete-account')));
+    await tester.pumpAndSettle();
+    final confirm = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.widgetWithText(TextButton, 'Delete account'),
+    );
+    // An empty password is refused locally.
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    expect(find.text('Enter your password to confirm.'), findsOneWidget);
+    expect(api.deletions, 0);
+
+    await tester.enterText(find.byType(TextFormField), 'incorrect');
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    expect(find.text('That password is incorrect.'), findsOneWidget);
+    expect(auth.session, isNotNull);
+
+    await tester.enterText(find.byType(TextFormField), 'private-password');
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    expect(api.deletions, 1);
+    expect(auth.session, isNull);
+    expect(find.byType(AlertDialog), findsNothing);
+  });
 }
