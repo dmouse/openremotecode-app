@@ -104,6 +104,8 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   bool _creating = false, _creationUncertain = false;
   int _draftNumber = 0;
   Timer? _poll;
+  static const _sentRefreshError =
+      'Message sent, but chat updates could not be refreshed. Reconnecting...';
 
   @override
   bool get scopeValid => !_disposed && active();
@@ -618,6 +620,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
       if (!_historyInitialized) messageCursor = nextCursor;
     }
     _historyInitialized = true;
+    if (!older && errorBox.value == _sentRefreshError) errorBox.value = null;
     if (messages.length > 200 ||
         (messages.length == 200 && messageCursor != null)) {
       messages = messages.skip(messages.length - 200).toList();
@@ -821,7 +824,15 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
           if (!valid(generation)) return;
           if (response['accepted'] != true) throw ChatFailure.invalid;
           accepted = true;
-          if (!_stream.live) await _readSnapshot(generation);
+          // A stream can still look live after its last update was lost. The
+          // acknowledgement confirms submission, not that the event arrived:
+          // read authoritative history and rebase the stream after every send.
+          // Never retry the prompt itself if this follow-up read fails.
+          try {
+            await _readSnapshot(generation);
+          } catch (_) {
+            if (valid(generation)) errorBox.value = _sentRefreshError;
+          }
         },
         mutation: true,
         onFailure: _handleFailure,

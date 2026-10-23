@@ -25,7 +25,7 @@ final class ChatStream {
   Object? _generation;
   int _revision = -1;
   bool _pending = false, _disposed = false;
-  Timer? _renew, _gap;
+  Timer? _renew, _gap, _lease;
   final _buffer = <int, Map<String, dynamic>>{};
   bool get active => _target != null;
   bool get live => active && _revision >= 0;
@@ -64,14 +64,23 @@ final class ChatStream {
     final target = _target;
     if (target == null || _pending || !_current(target)) return;
     _pending = true;
+    final requestedRevision = _revision;
     try {
-      final response = await repository.chatRequest(
-        connectorId,
-        'chat.stream.subscribe',
-        target,
-      );
+      final response = await repository
+          .chatRequest(connectorId, 'chat.stream.subscribe', target)
+          .timeout(const Duration(seconds: 20));
       if (!_current(target)) return;
       final revision = _validate(response);
+      // A renewal must advance beyond the revision known when it was requested.
+      // An expired/recreated connector lease starts at zero under the same ID;
+      // silently ignoring that baseline would leave this stream "live" forever
+      // while discarding its new events. Stop so the conversation's read-only
+      // fallback obtains a fresh snapshot and subscribes with a new ID.
+      // Compare to the request's revision, not events that overtook its reply.
+      if (revision <= requestedRevision) {
+        stop();
+        return;
+      }
       if (revision > _revision) {
         onSnapshot(
           response['snapshot'] as Map<String, dynamic>,
@@ -83,11 +92,19 @@ final class ChatStream {
       _buffer.removeWhere((key, _) => key <= _revision);
       _drain();
       onChanged();
+      if (!_current(target)) return;
       _renew?.cancel();
       _renew = Timer(
         const Duration(seconds: 25),
         () => unawaited(_subscribe()),
       );
+      // Events do not renew the connector's 60-second lease. Independently
+      // retire stale local liveness before that deadline, even if a renewal
+      // timer was delayed or a request never settled.
+      _lease?.cancel();
+      _lease = Timer(const Duration(seconds: 50), () {
+        if (identical(target, _target)) stop();
+      });
     } catch (_) {
       if (identical(target, _target)) stop();
     } finally {
@@ -186,6 +203,7 @@ final class ChatStream {
     _buffer.clear();
     _renew?.cancel();
     _gap?.cancel();
+    _lease?.cancel();
     if (previous != null &&
         repository.chatOnline(connectorId) &&
         repository.chatTrusted(connectorId)) {
