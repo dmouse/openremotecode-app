@@ -1,12 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../../ui/core/app_theme.dart';
+import '../data/external_link_opener.dart';
+import '../domain/web_link.dart';
+import 'web_link_text.dart';
 
 class MarkdownMessage extends StatefulWidget {
-  const MarkdownMessage({super.key, required this.text});
+  const MarkdownMessage({
+    super.key,
+    required this.text,
+    this.linkOpener = const ExternalLinkOpener(),
+  });
   final String text;
+  final ExternalLinkOpener linkOpener;
   @override
   State<MarkdownMessage> createState() => _MarkdownMessageState();
 }
@@ -18,7 +28,17 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
   Widget? _rendered;
 
   static final _deepBlock = RegExp(r'^[\t >*+\-\d.)]{16}', multiLine: true);
-  static final _links = _PassiveLinkBuilder();
+  bool _openingLink = false;
+
+  Future<void> _openLink(String? destination) async {
+    if (_openingLink) return;
+    _openingLink = true;
+    try {
+      await showMessageLink(context, destination, widget.linkOpener);
+    } finally {
+      _openingLink = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,8 +81,10 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
         softLineBreak: true,
         extensionSet: md.ExtensionSet.gitHubFlavored,
         blockSyntaxes: const [_LiteralHtmlBlockSyntax()],
-        // Registering an anchor builder avoids link gesture recognizers entirely.
-        builders: {'a': _links},
+        inlineSyntaxes: [_PullRequestLinkSyntax()],
+        onTapLink: (_, href, _) {
+          unawaited(_openLink(href));
+        },
         imageBuilder: (_, _, alt) => Text(
           alt == null || alt.isEmpty
               ? '[Image not loaded]'
@@ -84,7 +106,10 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
         ),
         styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
           p: body,
-          a: const TextStyle(color: AppTheme.ink),
+          a: const TextStyle(
+            color: AppTheme.info,
+            decoration: TextDecoration.underline,
+          ),
           strong: const TextStyle(
             fontWeight: FontWeight.bold,
             color: AppTheme.markdownBold,
@@ -135,15 +160,31 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
   }
 }
 
-class _PassiveLinkBuilder extends MarkdownElementBuilder {
+/// Inline parsing leaves fenced/inline code and literal HTML untouched. Avoid
+/// rewriting an existing Markdown link's label into a nested anchor as well.
+class _PullRequestLinkSyntax extends md.InlineSyntax {
+  _PullRequestLinkSyntax()
+    : super(pullRequestLinkPattern, caseSensitive: false);
+
   @override
-  void visitElementBefore(md.Element element) {
-    final destination = element.attributes['href'];
-    // Expose the actual destination as selectable text, never as a launchable
-    // URI. Only the renderer's temporary AST changes, not the stored message.
-    if (destination != null && destination != element.textContent) {
-      element.children?.add(md.Text(' ($destination)'));
+  bool tryMatch(md.InlineParser parser, [int? startMatchPos]) {
+    final position = startMatchPos ?? parser.pos;
+    final match = pattern.matchAsPrefix(parser.source, position);
+    if (match == null || parseWebLink(match.group(2)) == null) return false;
+    if (parser.source.lastIndexOf('[', position) >
+        parser.source.lastIndexOf(']', position)) {
+      return false;
     }
+    return super.tryMatch(parser, startMatchPos);
+  }
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    parser.addNode(
+      md.Element.text('a', match.group(1)!)
+        ..attributes['href'] = match.group(2)!,
+    );
+    return true;
   }
 }
 

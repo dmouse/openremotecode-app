@@ -12,6 +12,7 @@ import 'markdown_message.dart';
 import 'subtask_view.dart';
 import 'thought_view.dart';
 import 'tool_run_view.dart';
+import 'web_link_text.dart';
 import 'tool_view.dart';
 import 'activity_animation.dart';
 import 'typing_indicator.dart';
@@ -806,8 +807,8 @@ class _UserBubble extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SelectableText(
-          text,
+        WebLinkText(
+          text: text,
           style: Theme.of(context).textTheme.bodyLarge
               ?.copyWith(color: AppTheme.ink),
         ),

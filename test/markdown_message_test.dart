@@ -7,6 +7,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openremotecode/features/chat/chat_view_model.dart';
 import 'package:openremotecode/features/chat/data/chat_repository.dart';
+import 'package:openremotecode/features/chat/data/external_link_opener.dart';
 import 'package:openremotecode/features/chat/domain/chat_models.dart';
 import 'package:openremotecode/features/chat/ui/conversation_view.dart';
 import 'package:openremotecode/features/chat/ui/markdown_message.dart';
@@ -215,14 +216,122 @@ void main() {
     expect(rendered, contains('<img src="https://example.invalid/html.png">'));
   });
 
-  testWidgets('links expose destinations without even no-op link recognizers', (
+  testWidgets(
+    'web links are styled, selectable, and open only after destination confirmation',
+    (tester) async {
+      final calls = _interceptPlatform(tester);
+      var httpClients = 0;
+      const destinations = [
+        'https://example.invalid/page',
+        'http://example.invalid/plain',
+      ];
+      final opened = <Uri>[];
+      final opener = ExternalLinkOpener(
+        launch: (uri) async {
+          opened.add(uri);
+          return true;
+        },
+      );
+      await HttpOverrides.runZoned(
+        () async {
+          for (final destination in destinations) {
+            await _show(
+              tester,
+              '[**Label**](<$destination>)',
+              linkOpener: opener,
+            );
+            expect(_selectableText(tester), 'Label');
+            expect(_style(tester, 'Label').fontWeight, FontWeight.bold);
+            expect(
+              _style(tester, 'Label').decoration,
+              TextDecoration.underline,
+            );
+            expect(_linkSpans(tester), isNotEmpty);
+            final before = opened.length;
+            await tester.tapAt(_wordCenter(tester, _markdownText(), 0, 5));
+            await tester.pumpAndSettle();
+            expect(find.text('Open external link?'), findsOneWidget);
+            expect(find.text(destination), findsOneWidget);
+            expect(opened.length, before);
+            await tester.tap(find.text('Cancel'));
+            await tester.pumpAndSettle();
+            expect(opened.length, before);
+            await tester.tapAt(_wordCenter(tester, _markdownText(), 0, 5));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Open'));
+            await tester.pumpAndSettle();
+            expect(opened.last, Uri.parse(destination));
+            expect(tester.takeException(), isNull);
+          }
+          await _show(
+            tester,
+            '<https://example.invalid/auto>\n\n'
+            '[Reference][ref]\n\n[ref]: https://example.invalid/reference',
+          );
+          expect(
+            _selectableText(tester),
+            'https://example.invalid/auto\n'
+            'Reference',
+          );
+          expect(_linkSpans(tester).length, 2);
+          await _show(
+            tester,
+            'See https://example.invalid/bare.',
+            linkOpener: opener,
+          );
+          expect(
+            _linkSpans(tester).single.text,
+            'https://example.invalid/bare',
+          );
+          await tester.pumpWidget(const SizedBox());
+        },
+        createHttpClient: (_) {
+          httpClients++;
+          throw StateError('Unexpected HTTP client in synthetic Markdown test');
+        },
+      );
+      expect(httpClients, 0);
+      expect(calls, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'OpenCode PR labels hide the parenthesized URL and open its original destination',
+    (tester) async {
+      const source = 'PR #17 (https://github.com)';
+      const url = 'https://github.com';
+      final opened = <Uri>[];
+      await _show(
+        tester,
+        source,
+        linkOpener: ExternalLinkOpener(
+          launch: (uri) async {
+            opened.add(uri);
+            return true;
+          },
+        ),
+      );
+      expect(_selectableText(tester), 'PR #17');
+      expect(_linkSpans(tester).single.text, 'PR #17');
+      expect(
+        tester.widget<MarkdownBody>(find.byType(MarkdownBody)).data,
+        source,
+      );
+      await tester.tapAt(_wordCenter(tester, _markdownText(), 0, 6));
+      await tester.pumpAndSettle();
+      expect(find.text(url), findsOneWidget);
+      expect(opened, isEmpty);
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(opened, [Uri.parse(url)]);
+    },
+  );
+
+  testWidgets('non-web and local destinations never leave the app', (
     tester,
   ) async {
     final calls = _interceptPlatform(tester);
-    var httpClients = 0;
-    const destinations = [
-      'https://example.invalid/page',
-      'http://example.invalid/plain',
+    for (final destination in [
       'javascript:alert%281%29',
       'data:text/html,synthetic',
       'file:///synthetic.txt',
@@ -230,49 +339,155 @@ void main() {
       'intent://synthetic',
       '/relative/path',
       '#section',
-    ];
-    await HttpOverrides.runZoned(
-      () async {
-        for (final destination in destinations) {
-          await _show(tester, '[**Label**](<$destination>)');
-          expect(_selectableText(tester), 'Label ($destination)');
-          expect(_style(tester, 'Label').fontWeight, FontWeight.bold);
-          _expectPassiveText(tester);
-          expect(
-            tester.getSemantics(_markdownText()),
-            isSemantics(
-              label: 'Label ($destination)',
-              isLink: false,
-              isTextField: false,
-              hasTapAction: false,
-              hasSetTextAction: false,
-            ),
-          );
-          await tester.tap(_markdownText());
-          await tester.pumpAndSettle();
-          expect(_selectableText(tester), 'Label ($destination)');
-          expect(tester.takeException(), isNull);
-        }
-        await _show(
-          tester,
-          '<https://example.invalid/auto>\n\n'
-          '[Reference][ref]\n\n[ref]: https://example.invalid/reference',
-        );
-        expect(
-          _selectableText(tester),
-          'https://example.invalid/auto\n'
-          'Reference (https://example.invalid/reference)',
-        );
-        _expectPassiveText(tester);
-        await tester.pumpWidget(const SizedBox());
-      },
-      createHttpClient: (_) {
-        httpClients++;
-        throw StateError('Unexpected HTTP client in synthetic Markdown test');
-      },
-    );
-    expect(httpClients, 0);
+      'https://user:secret@example.invalid/page',
+    ]) {
+      await _show(tester, '[Label](<$destination>)');
+      await tester.tapAt(_wordCenter(tester, _markdownText(), 0, 5));
+      await tester.pumpAndSettle();
+      expect(find.text('Open external link?'), findsNothing);
+      expect(
+        find.text('Only HTTP and HTTPS web links can be opened.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      ScaffoldMessenger.of(tester.element(find.byType(MarkdownMessage)))
+          .clearSnackBars();
+      await tester.pumpAndSettle();
+    }
     expect(calls, isEmpty);
+  });
+
+  testWidgets(
+    'PR compaction is presentation-only and leaves code and existing Markdown links intact',
+    (tester) async {
+      await _show(
+        tester,
+        'Created **PR #17 (https://github.com/a/b/pull/17)**, '
+        'and PR #18 (https://github.com/a/b/pull/18).',
+      );
+      expect(_selectableText(tester), 'Created PR #17, and PR #18.');
+      expect(_linkSpans(tester).map((span) => span.text), ['PR #17', 'PR #18']);
+      expect(_style(tester, 'PR #17').fontWeight, FontWeight.bold);
+      await _show(
+        tester,
+        '`PR #17 (https://github.com)`\n\n```text\nPR #18 (https://github.com)\n```',
+      );
+      expect(
+        _selectableText(tester),
+        'PR #17 (https://github.com)\nPR #18 (https://github.com)',
+      );
+      expect(_linkSpans(tester), isEmpty);
+      await _show(tester, '[PR #17](https://github.com/a/b/pull/17)');
+      expect(_selectableText(tester), 'PR #17');
+      expect(_linkSpans(tester).single.text, 'PR #17');
+      await _show(tester, 'PR #17 (https://user:password@example.invalid)');
+      expect(
+        _selectableText(tester),
+        'PR #17 (https://user:password@example.invalid)',
+      );
+    },
+  );
+
+  testWidgets(
+    'a streamed PR reference compacts only after its destination is complete',
+    (tester) async {
+      await _show(tester, 'PR #17 (https://github.com');
+      final element = tester.element(find.byType(MarkdownMessage));
+      expect(_selectableText(tester), 'PR #17 (https://github.com');
+      await _show(tester, 'PR #17 (https://github.com)');
+      expect(tester.element(find.byType(MarkdownMessage)), same(element));
+      expect(_selectableText(tester), 'PR #17');
+      expect(_linkSpans(tester).single.text, 'PR #17');
+    },
+  );
+
+  testWidgets(
+    'a browser failure shows a safe error without leaking URL parameters',
+    (tester) async {
+      await _show(
+        tester,
+        '[Open](https://example.invalid/?token=PRIVATE)',
+        linkOpener: ExternalLinkOpener(launch: (_) async => false),
+      );
+      await tester.tapAt(_wordCenter(tester, _markdownText(), 0, 4));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Open'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Could not open this link. Check that a browser is installed.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('PRIVATE'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('URLs inside inline and fenced code stay passive', (
+    tester,
+  ) async {
+    final calls = _interceptPlatform(tester);
+    await _show(
+      tester,
+      '`https://example.invalid/inline`\n\n```text\nhttps://example.invalid/code\n```',
+    );
+    expect(_linkSpans(tester), isEmpty);
+    expect(calls, isEmpty);
+  });
+
+  testWidgets(
+    'link text is accessible and long-press selection does not open it',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _show(tester, '[Documentation](https://example.invalid/docs)');
+      SemanticsNode? link;
+      void visit(SemanticsNode node) {
+        if (node.label.trim() == 'Documentation') link = node;
+        node.visitChildren((child) {
+          visit(child);
+          return true;
+        });
+      }
+
+      visit(tester.getSemantics(_markdownText()));
+      expect(link, isNotNull);
+      expect(
+        link!,
+        matchesSemantics(label: link!.label, isLink: true, hasTapAction: true),
+      );
+      await tester.longPressAt(_wordCenter(tester, _markdownText(), 0, 13));
+      await tester.pumpAndSettle();
+      expect(find.text('Open external link?'), findsNothing);
+      expect(find.text('Copy'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      semantics.dispose();
+    },
+  );
+
+  testWidgets('destination confirmation fits a small screen with large text', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 700);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final destination = 'https://example.invalid/${'segment/' * 100}';
+    await tester.pumpWidget(
+      _app(
+        ListView(children: [MarkdownMessage(text: '[Docs]($destination)')]),
+        scale: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tapAt(_wordCenter(tester, _markdownText(), 0, 4));
+    await tester.pumpAndSettle();
+    expect(find.text('Open external link?'), findsOneWidget);
+    expect(find.text(destination), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('all image sources become blocked alt text without resource IO', (
@@ -311,8 +526,6 @@ void main() {
           '(javascript:synthetic)',
         );
         expect(find.text('[Image not loaded: Linked alt]'), findsOneWidget);
-        expect(_selectableText(tester), contains('(javascript:synthetic)'));
-        _expectPassiveText(tester);
         await tester.tap(find.text('[Image not loaded: Linked alt]'));
         await tester.pumpAndSettle();
         expect(find.byType(Image), findsNothing);
@@ -514,7 +727,8 @@ void main() {
           findsOneWidget,
           reason: 'User messages must retain their raw SelectableText',
         );
-        expect(tester.widget<SelectableText>(userText).data, source);
+        final selectable = tester.widget<SelectableText>(userText);
+        expect(selectable.data ?? selectable.textSpan!.toPlainText(), source);
         expect(
           find.descendant(of: user, matching: find.byType(MarkdownMessage)),
           findsNothing,
@@ -541,10 +755,7 @@ void main() {
           find.descendant(of: assistant, matching: find.byType(EditableText)),
           findsNothing,
         );
-        expect(
-          _selectableText(tester, assistant),
-          'Synthetic code Label (https://example.invalid/page)',
-        );
+        expect(_selectableText(tester, assistant), 'Synthetic code Label');
         expect(
           find.descendant(
             of: assistant,
@@ -566,7 +777,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.element(find.byType(MarkdownMessage)), same(element));
         expect(_selectableText(tester, assistant), 'Updated\nNew paragraph');
-        expect(tester.widget<SelectableText>(userText).data, source);
+        final updatedUser = tester.widget<SelectableText>(userText);
+        expect(updatedUser.data ?? updatedUser.textSpan!.toPlainText(), source);
         expect(find.text('Long message shortened for display.'), findsNothing);
         expect(model.conversation.messages.first.text, source);
         expect(tester.takeException(), isNull);
@@ -636,9 +848,17 @@ Widget _app(Widget child, {double scale = 1}) => MaterialApp(
   home: Scaffold(body: child),
 );
 
-Future<void> _show(WidgetTester tester, String text) async {
+Future<void> _show(
+  WidgetTester tester,
+  String text, {
+  ExternalLinkOpener linkOpener = const ExternalLinkOpener(),
+}) async {
   await tester.pumpWidget(
-    _app(ListView(children: [MarkdownMessage(text: text)])),
+    _app(
+      ListView(
+        children: [MarkdownMessage(text: text, linkOpener: linkOpener)],
+      ),
+    ),
   );
   await tester.pumpAndSettle();
 }
@@ -689,38 +909,22 @@ TextStyle _style(WidgetTester tester, String text) {
   return matches.single;
 }
 
-void _expectPassiveText(WidgetTester tester) {
-  // SelectionArea owns gestures outside MarkdownBody; links add none inside it.
-  expect(
-    find.descendant(
-      of: find.byType(MarkdownBody),
-      matching: find.byType(GestureDetector),
-    ),
-    findsNothing,
-  );
-  expect(
-    find.descendant(
-      of: find.byType(MarkdownBody),
-      matching: find.byType(RawGestureDetector),
-    ),
-    findsNothing,
-  );
+List<TextSpan> _linkSpans(WidgetTester tester) {
+  final links = <TextSpan>[];
   void visit(InlineSpan span) {
     if (span is TextSpan) {
-      expect(span.recognizer, isNull);
+      if (span.recognizer != null) links.add(span);
       for (final child in span.children ?? <InlineSpan>[]) {
         visit(child);
       }
     }
   }
 
-  expect(find.byType(SelectableText), findsNothing);
-  expect(find.byType(EditableText), findsNothing);
   final text = tester.widgetList<RichText>(_markdownText()).toList();
-  expect(text, isNotEmpty);
   for (final widget in text) {
     visit(widget.text);
   }
+  return links;
 }
 
 Offset _wordCenter(WidgetTester tester, Finder text, int start, int end) {
