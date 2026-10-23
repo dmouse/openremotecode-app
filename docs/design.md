@@ -628,11 +628,25 @@ plugin to advertise the new capability. See the
 Rendered synthetic previews: [task row](previews/chat-subtasks.png) and
 [child conversation](previews/subtask-chat.png).
 
+## Project folder approval
+
+The Projects page offers only the connector's approved project list and search.
+There is no **Open project by path** action, including when an older connector
+advertises `pathEntry: true`. Below the list, explain that a missing project must
+be opened in the OpenCode TUI and enabled through `/remote`. Empty lists direct
+the user to approve a folder locally and refresh. Do not imply that the current
+TUI-hosted connector survives closing every TUI; service hosting is deferred.
+
 ## Markdown messages
 
 Assistant text renders as selectable GitHub Flavored Markdown with pinned
 `flutter_markdown_plus` 1.0.12 and `markdown` 7.3.1. User prompts remain literal
-selectable text. The renderer handles assistant text parts without merging or
+selectable text, with bounded HTTP/S URL spans rather than Markdown interpretation.
+Plain `PR #17 (https://github.com/...)` references display only **PR #17** as
+the clickable label, hiding the parenthesized destination in the conversation.
+This is presentation-only; the received message is not modified. Code examples
+and incomplete/invalid references are not compacted.
+The renderer handles assistant text parts without merging or
 duplicating them; thought excerpts are plain styled text. Formatting includes headings,
 emphasis, strikethrough, paragraphs, line breaks, ordered/unordered lists, static
 task checkboxes, quotes, inline/fenced code, and tables. No syntax highlighting,
@@ -664,13 +678,24 @@ all schemes, including network, file, asset, and data URLs, become an explicit
 not-loaded placeholder with their alt text. Rendering must not load external or
 local resources, perform native platform calls, or write conversation data.
 
-Links display their label and actual destination as selectable text with no
-link gesture recognizer, browser launcher, or URL resolution against the project.
+Web links are underlined in `AppTheme.info` and respond to taps. Before opening,
+show the actual destination in a selectable confirmation dialog, independently
+of its Markdown label. Only an explicit Open action launches an absolute HTTP/S
+URL through the system's external handler (`url_launcher`, no embedded WebView).
+Reject non-web schemes, relative/project paths, credentials in authority, invalid
+ports, control/bidi characters and destinations over 4096 UTF-16 units. Failed
+launches show a fixed error without URL parameters or native exception details.
+No preview, image, link check, navigation or platform call occurs during rendering.
+Literal prompts have at most 64 clickable URL spans; code, thoughts, tool output
+and the large-message Markdown fallback remain passive. Never resolve a URL
+against the project or forward app credentials/headers to the destination.
 Task checkboxes convey checked state but cannot submit commands or permissions.
 No new network capability, server storage, or sensitive logging is added. Tests
-intercept HTTP creation and platform channels, verify inert links and images,
+intercept HTTP creation and platform channels, verify explicit web-link opening,
+blocked destinations and inert images,
 and cover selection, literal HTML/code, incomplete Markdown, same-ID updates,
 small-screen large-text layout, and mixed-height history anchoring.
+See [ADR 0005](adr/0005-explicit-web-links.md).
 
 ## Flutter boundaries and performance
 

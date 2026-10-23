@@ -15,6 +15,67 @@ import 'package:openremotecode/ui/core/app_theme.dart';
 
 void main() {
   testWidgets(
+    'projects guide local approval and never offer path entry, even with an older connector',
+    (tester) async {
+      final repository = _Chats();
+      addTearDown(repository.changes.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: ChatFlowScreen(
+            repository: repository,
+            connectorId: 'connector',
+            connectionName: 'Laptop',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Missing a project?'), findsOneWidget);
+      expect(find.textContaining('use /remote'), findsOneWidget);
+      expect(find.text('Open project by path'), findsNothing);
+      expect(repository.operations, isNot(contains('project.open')));
+      await tester.tap(find.text('Sample project'));
+      await tester.pumpAndSettle();
+      expect(find.text('Existing chat'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'an empty approved project list explains how to enable a folder and fits large text',
+    (tester) async {
+      final repository = _Chats()..projectsEnabled = false;
+      addTearDown(repository.changes.close);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 700);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: ChatFlowScreen(
+            repository: repository,
+            connectorId: 'connector',
+            connectionName: 'Laptop',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('No projects enabled.'), findsOneWidget);
+      expect(find.text('Open project by path'), findsNothing);
+      expect(find.text('Sample project'), findsNothing);
+      expect(tester.takeException(), isNull);
+      expect(repository.operations, isNot(contains('project.open')));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'polling preserves the oldest cursor and refresh recovers expired history',
     (tester) async {
       final repository = _HistoryChats();
@@ -2085,6 +2146,7 @@ class _HistoryChats extends _Chats {
 class _Chats implements ChatRepository {
   final changes = StreamController<void>.broadcast();
   bool online = true;
+  bool projectsEnabled = true;
   bool trusted = true;
   String projectName = 'Sample project';
   int creates = 0, prompts = 0;
@@ -2155,7 +2217,8 @@ class _Chats implements ChatRepository {
     'project.list' => {
       'version': 1,
       'projects': [
-        {'id': 'project', 'name': projectName, 'path': '/work/sample'},
+        if (projectsEnabled)
+          {'id': 'project', 'name': projectName, 'path': '/work/sample'},
       ],
       'pathEntry': true,
     },

@@ -1,22 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../../../ui/core/app_button.dart';
 import '../../../ui/core/app_theme.dart';
 import '../../../ui/core/search_field.dart';
 import '../chat_view_model.dart';
 
-/// The projects page: search across authorized projects, plus an optional
-/// "open by path" fallback for connectors that allow it.
+/// The projects page lists only folders enabled locally through `/remote`.
 class ProjectsView extends StatelessWidget {
-  const ProjectsView({
-    super.key,
-    required this.model,
-    required this.search,
-    required this.onPath,
-  });
+  const ProjectsView({super.key, required this.model, required this.search});
   final ChatViewModel model;
   final TextEditingController search;
-  final VoidCallback onPath;
   @override
   Widget build(BuildContext context) => ValueListenableBuilder(
     valueListenable: search,
@@ -59,19 +51,16 @@ class ProjectsView extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Text(
                 query.isEmpty
-                    ? 'No authorized projects are available.'
+                    ? 'No projects enabled. Approve a folder through /remote '
+                          'in the OpenCode TUI, then refresh this list.'
                     : 'No projects match your search.',
               ),
             ),
-          if (model.projects.pathEntry)
-            Padding(
-              padding: const EdgeInsets.only(top: 20),
-              child: AppButton.secondary(
-                label: 'Open project by path',
-                icon: Icons.folder_open,
-                onPressed: model.online && !model.loading ? onPath : null,
-              ),
-            ),
+          const SizedBox(height: 8),
+          const Text(
+            'Missing a project? Open it in the OpenCode TUI, then use /remote '
+            'to enable remote access for that folder.',
+          ),
         ],
       );
     },

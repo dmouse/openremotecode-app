@@ -14,7 +14,6 @@ import 'chat_list_view.dart';
 import 'conversation_page.dart';
 import 'model_banner.dart';
 import 'model_list_sheet.dart';
-import 'project_path_sheet.dart';
 import 'projects_view.dart';
 import 'rename_chat_dialog.dart';
 import 'todo_banner.dart';
@@ -140,16 +139,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
     _composerFocus.dispose();
     _modelSearch.dispose();
     super.dispose();
-  }
-
-  Future<void> _openPath() async {
-    final entered = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => ProjectPathSheet(connectionName: widget.connectionName),
-    );
-    if (entered != null && mounted) await model.openPath(entered);
   }
 
   Future<void> _renameChat() async {
@@ -462,7 +451,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
                     ChatPage.projects => ProjectsView(
                       model: model,
                       search: search,
-                      onPath: _openPath,
                     ),
                     ChatPage.chats => ChatListView(
                       model: model,

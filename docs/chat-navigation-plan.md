@@ -8,12 +8,18 @@ Double-tap a verified connection, or use **Open projects**, to follow
 **Connection → Project → Chats → Conversation**. Single tap still selects a
 connection. Back moves through those screens in reverse order.
 
-Projects are the connector's locally authorized existing working directories.
-The default is the current OpenCode directory. The plugin option
-`projectDirectories` may contain additional exact absolute directories approved
-on the connected computer. **Open project by path** resolves only a directory
-already in that policy. It cannot create folders, clone repositories, browse the
-filesystem, or authorize additional paths remotely.
+Projects are the connector's explicitly enabled existing working directories.
+Open a project in the OpenCode TUI and use `/remote` to enable access for that
+folder, then refresh Projects on the phone. New connector installations have no
+implicit default folder; opening another TUI location does not grant it access.
+Approvals persist locally across restarts. The current connector still requires
+at least one TUI running; service-only hosting is a separate milestone.
+
+**Open project by path** and its entry sheet have been removed, even for older
+connectors advertising path entry. A hint and empty-list message explain local
+approval. The app cannot create folders, clone repositories, browse the
+filesystem, or authorize additional paths remotely. See the plugin's
+[folder-approval ADR](../../packages/agents/opencode/docs/adr/0017-explicit-folder-approvals.md).
 
 The projects app bar mirrors the chats app bar: the connection name is the
 title with a small online/offline icon in the actions area, keeping accessible
@@ -82,7 +88,8 @@ Conversation shows bounded message snapshots and tool summaries,
 with a text composer and Stop. It polls authoritative snapshots every three
 seconds while active. Assistant messages now render selectable Markdown,
 including lists, headings, code, and tables; user prompts remain literal text.
-Images are blocked and links are passive selectable text. See the
+Images are blocked. Web links are clickable with a destination confirmation;
+non-web destinations remain blocked. See the
 [Markdown rendering contract](design.md#markdown-messages). This iteration does
 not yet provide event streaming, todos, or permission-response controls.
 
