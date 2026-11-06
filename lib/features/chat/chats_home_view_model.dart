@@ -44,14 +44,49 @@ final class ChatsHomeViewModel extends ChangeNotifier {
   int _generation = 0;
   bool _refreshAgain = false;
   String? selectedMachine;
+  (String, String)? _selectedFolder;
+  (String, String)? get selectedFolder => _selectedFolder;
+  String? filterNotice;
+  int _filterRevision = 0;
 
   List<RemoteConnection> get machines => connections.connections;
-  List<ChatViewModel> get sources => _sources.values
+
+  /// Folder choices follow the machine scope, not the selected folder itself.
+  List<ChatViewModel> get folderSources => _sources.values
       .where(
         (source) =>
-            selectedMachine == null || source.connectorId == selectedMachine,
+            source.project != null &&
+            (selectedMachine == null || source.connectorId == selectedMachine),
       )
       .toList();
+  List<ChatViewModel> get sources => folderSources
+      .where(
+        (source) =>
+            _selectedFolder == null ||
+            _selectedFolder == (source.connectorId, source.project!.path),
+      )
+      .toList();
+
+  String folderLabel(ChatViewModel source) {
+    final project = source.project!;
+    final label = project.name.startsWith('/')
+        ? project.name
+        : '/${project.name}';
+    final duplicates = folderSources
+        .where((s) => s.project!.name == project.name)
+        .toList();
+    if (duplicates.length < 2) return label;
+    if (duplicates.any(
+      (s) => s != source && s.connectorId == source.connectorId,
+    )) {
+      return project.path;
+    }
+    final machine = machines
+        .where((m) => m.id == source.connectorId)
+        .firstOrNull;
+    return '$label · ${machine?.name ?? 'Connection'}';
+  }
+
   List<String> get errors => [
     if (connections.error != null) connections.error!,
     for (final entry in _errors.entries)
@@ -87,8 +122,39 @@ final class ChatsHomeViewModel extends ChangeNotifier {
       _drafts.putIfAbsent((source.connectorId, source.project!.path), () => {});
 
   void selectMachine(String? id) {
+    if (_disposed || (id != null && !machines.any((m) => m.id == id))) return;
     selectedMachine = id;
+    _selectedFolder = null;
+    filterNotice = null;
+    _filterRevision++;
     notifyListeners();
+  }
+
+  void selectFolder(ChatViewModel source) {
+    if (_disposed ||
+        !folderSources.contains(source) ||
+        source.project == null ||
+        !repository.chatTrusted(source.connectorId)) {
+      return;
+    }
+    selectedMachine = source.connectorId;
+    _selectedFolder = (source.connectorId, source.project!.path);
+    filterNotice = null;
+    _filterRevision++;
+    notifyListeners();
+  }
+
+  void _reconcileFolder() {
+    final selected = _selectedFolder;
+    if (selected == null) return;
+    final source = _sources[selected];
+    if (source == null ||
+        source.project == null ||
+        !repository.chatTrusted(selected.$1)) {
+      _selectedFolder = null;
+      _filterRevision++;
+      filterNotice = 'The selected folder is no longer available. The folder filter was cleared.';
+    }
   }
 
   void _connectionsChanged() {
@@ -104,7 +170,12 @@ final class ChatsHomeViewModel extends ChangeNotifier {
       }
     }
     _errors.removeWhere((id, _) => !allowed.contains(id));
-    if (!machines.any((m) => m.id == selectedMachine)) selectedMachine = null;
+    if (selectedMachine != null &&
+        !machines.any((m) => m.id == selectedMachine)) {
+      selectedMachine = null;
+      _filterRevision++;
+    }
+    _reconcileFolder();
     final online = allowed.where(repository.chatOnline).toSet();
     final changed = !setEquals(online, _online);
     _online
@@ -156,6 +227,7 @@ final class ChatsHomeViewModel extends ChangeNotifier {
               _drafts.remove(key)?.clear();
             }
           }
+          _reconcileFolder();
           _errors.remove(machine.id);
           for (final project in discovery.projects) {
             if (!valid(machine.id) || !repository.chatOnline(machine.id)) break;
@@ -175,7 +247,7 @@ final class ChatsHomeViewModel extends ChangeNotifier {
             }
             if (!valid(machine.id)) break;
             if (source.error != null) source.chatList.reset();
-            notifyListeners();
+            _notify();
           }
         } catch (failure) {
           if (valid(machine.id)) {
@@ -194,7 +266,7 @@ final class ChatsHomeViewModel extends ChangeNotifier {
     } finally {
       loading = false;
       if (!_disposed) {
-        notifyListeners();
+        _notify();
         if (_refreshAgain && _active) {
           _refreshAgain = false;
           unawaited(refresh());
@@ -206,10 +278,11 @@ final class ChatsHomeViewModel extends ChangeNotifier {
   Future<void> loadMore() async {
     if (_disposed || !_active || loading) return;
     loading = true;
+    final filterRevision = _filterRevision;
     notifyListeners();
     try {
       for (final source in sources) {
-        if (_disposed || !_active) break;
+        if (_disposed || !_active || filterRevision != _filterRevision) break;
         if (source.online &&
             source.chatList.chatCursor != null &&
             source.chatList.moreChatsError == null) {
@@ -227,7 +300,10 @@ final class ChatsHomeViewModel extends ChangeNotifier {
   }
 
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) {
+      _reconcileFolder();
+      notifyListeners();
+    }
   }
 
   @override

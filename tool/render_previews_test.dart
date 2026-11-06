@@ -16,6 +16,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openremotecode/app.dart';
 import 'package:openremotecode/features/chat/data/chat_repository.dart';
+import 'package:openremotecode/features/chat/chats_home_view_model.dart';
+import 'package:openremotecode/features/chat/ui/chats_home_view.dart';
+import 'package:openremotecode/features/connections/connections_view_model.dart';
+import 'package:openremotecode/features/connections/domain/remote_connection.dart';
 import 'package:openremotecode/features/chat/ui/chat_flow_screen.dart';
 import 'package:openremotecode/features/chat/domain/voice_recorder.dart';
 import 'package:openremotecode/features/server_settings/domain/server_endpoint.dart';
@@ -393,6 +397,71 @@ Future<void> _openConversation(WidgetTester tester) async {
 
 void main() {
   setUpAll(_loadFonts);
+
+  testWidgets('unified home filters in light and dark', (tester) async {
+    await _size(tester, const Size(390, 844), 2);
+    for (final theme in [AppTheme.light, AppTheme.dark]) {
+      final repository = FakeConnectionsRepository()
+        ..connections = const [
+          RemoteConnection(
+            id: 'dev',
+            name: 'Dev',
+            status: ConnectionStatus.online,
+          ),
+          RemoteConnection(
+            id: 'build',
+            name: 'Build',
+            status: ConnectionStatus.online,
+          ),
+        ];
+      final connections = ConnectionsViewModel(repository);
+      final chats = _SampleChats();
+      final home = ChatsHomeViewModel(connections, chats);
+      await tester.runAsync(() async {
+        await connections.load();
+        while (home.loading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+      });
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _shot,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: theme,
+            home: Scaffold(
+              appBar: AppBar(title: const Text('Chats')),
+              body: ChatsHomeView(
+                model: home,
+                onOpen: (_) {},
+                onConnect: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await _capture(tester, 'home-filters-${theme.brightness.name}');
+      final source = home.folderSources.first;
+      home.selectFolder(source);
+      await tester.pumpAndSettle();
+      final folder = find.byKey(
+        ValueKey(('folder-filter', source.connectorId, source.project!.path)),
+      );
+      await tester.scrollUntilVisible(
+        folder,
+        150,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('chat-filter-strip')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await _capture(tester, 'home-folder-${theme.brightness.name}');
+      await tester.pumpWidget(const SizedBox());
+      home.dispose();
+      connections.dispose();
+      await chats.changes.close();
+    }
+  });
 
   testWidgets('voice note presentation in light and dark', (tester) async {
     await _size(tester, const Size(390, 844), 2);

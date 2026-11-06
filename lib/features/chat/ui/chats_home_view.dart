@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../ui/core/inline_notice.dart';
 import '../../../ui/core/search_field.dart';
 import '../../../ui/core/chat_avatar.dart';
+import 'chat_filter_strip.dart';
 import '../chat_view_model.dart';
 import '../chats_home_view_model.dart';
 
@@ -26,6 +27,11 @@ class ChatsHomeView extends StatefulWidget {
 class _ChatsHomeViewState extends State<ChatsHomeView> {
   final _search = TextEditingController();
   final _scroll = ScrollController();
+  void _filterChanged() {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    _checkMore();
+  }
+
   Timer? _debounce;
   bool _scheduled = false;
 
@@ -139,6 +145,7 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
           .where((entry) => entry.chat.title.toLowerCase().contains(query))
           .toList();
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
@@ -147,47 +154,7 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
               hintText: model.hasMore ? 'Search loaded chats' : 'Search chats',
             ),
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('All'),
-                  labelStyle: Theme.of(context).textTheme.labelMedium
-                      ?.copyWith(fontSize: 13),
-                  selected: model.selectedMachine == null,
-                  onSelected: (_) {
-                    model.selectMachine(null);
-                    _checkMore();
-                  },
-                ),
-                for (final machine in model.machines)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: ChoiceChip(
-                      label: Text(machine.name),
-                      labelStyle: Theme.of(context).textTheme.labelMedium
-                          ?.copyWith(fontSize: 13),
-                      avatar: ExcludeSemantics(
-                        child: CircleAvatar(
-                          radius: 6,
-                          backgroundColor: connectionAccent(
-                            model.connections.colorFor(machine.id),
-                          ),
-                        ),
-                      ),
-                      tooltip: '${machine.name}: ${machine.statusLabel}',
-                      selected: model.selectedMachine == machine.id,
-                      onSelected: (_) {
-                        model.selectMachine(machine.id);
-                        _checkMore();
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          ChatFilterStrip(model: model, onChanged: _filterChanged),
           if (model.loading)
             const LinearProgressIndicator(semanticsLabel: 'Loading chats'),
           Expanded(
@@ -205,6 +172,8 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (model.filterNotice != null)
+                            InlineNotice(message: model.filterNotice!),
                           for (final machine in model.machines)
                             if ((model.selectedMachine == null ||
                                     model.selectedMachine == machine.id) &&

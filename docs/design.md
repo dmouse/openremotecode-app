@@ -17,21 +17,34 @@ menu contains **Connect**, then **Settings**; there is no navigation drawer.
 Connect opens connection inventory, pairing, rename and revocation, not project
 browsing. Both secondary destinations have Back to Chats.
 
-The home search is followed by horizontally scrolling, single-selection machine
-chips: **All** (default), then registered machine names. Filtering uses connector
-IDs, so rename does not change selection. The lazy list combines root chats from
+The home search is followed by one left-aligned, lazy, horizontally scrolling
+filter strip: **All** (default), then registered connections, then authorized
+folders. There is no second row or dropdown. Selecting a connection limits the
+folder chips to that connection; selecting a folder also selects its connection
+while keeping sibling folder choices visible. Selecting a connection clears the
+folder choice; All clears both. Filtering uses connector IDs and project paths,
+not display names or temporary project handles. Duplicate folder names show the
+connection name, or full paths for duplicates on the same connection.
+The lazy list combines root chats from
 authorized projects, pinned first and otherwise most recently updated first.
 Rows identify machine and project; a tap opens the conversation directly. Back
 restores the list's filter, search and scroll. Long press retains pin/delete
-actions. New chat opens an online authorized-project chooser scoped to the filter;
-choosing it only opens a draft, not a remote session.
+actions. New chat opens a draft directly in the selected folder, or an online
+authorized-project chooser scoped to the connection otherwise. Opening a draft
+does not create a remote session. Offline folders retain their selection and
+last-known rows; removal or trust loss clears the folder filter with a visible
+notice. Search and pagination stay within the active folder/connection scope.
 
-Filter labels are 13 logical pixels before system text scaling, without reducing
+Filter labels are 12 logical pixels before system text scaling, without reducing
 their padded touch targets. Connect > a machine's options > Color offers Default,
 Blue, Purple, Teal, Orange and Rose. This device-local choice is stored under a
 hashed server/account/connector scope in native secure storage. Renaming does not
-change it, and failed writes retain the last acknowledged color. Filter dots and
-chat avatars use the chosen accent. The list and conversation header share the
+change it, and failed writes retain the last acknowledged color. Connection
+chips use the assigned accent and a computer icon; folders use the theme's
+`info`/`infoSurface` colors and a folder icon; All is neutral. Connection accent
+values live in `AppTheme`, stay consistent in both modes and use dark foregrounds
+when selected. Folder colors adapt to light/dark mode. Chat avatars use the
+chosen connection accent. The list and conversation header share the
 same chat-bubble glyph; the header retains its separate presence/working badge.
 Neither color nor its selection changes identity, trust, status or authorization.
 

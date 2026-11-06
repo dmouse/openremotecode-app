@@ -183,6 +183,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     if (home == null || _chatOpen || _choosingProject) return;
     _choosingProject = true;
     try {
+      if (home.selectedFolder != null && home.sources.length == 1) {
+        await _openChat(home.sources.single);
+        return;
+      }
       final source = await chooseChatProject(context, home);
       if (mounted && source != null) await _openChat(source);
     } finally {
