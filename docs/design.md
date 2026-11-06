@@ -5,15 +5,39 @@ The proposed next iteration is documented in
 future behavior; this document records the currently implemented design except
 where a section explicitly defines a target pending implementation.
 
-Real authentication gates the Connections home. Debug builds default to
+Real authentication gates the Chats home. Debug builds default to
 `http://127.0.0.1:8080`; saved origin and build override precedence remain intact.
 Use the normalized server origin as a visible signing destination while keeping
 its editor hidden behind six background/branding taps.
 
 ## Home and navigation
 
-Connections is the home destination. A left drawer opens from the menu button on
-phones; at 720 logical pixels or wider a 280-pixel sidebar stays visible.
+Chats is the home destination on phones and wider screens. A top-right overflow
+menu contains **Connect**, then **Settings**; there is no navigation drawer.
+Connect opens connection inventory, pairing, rename and revocation, not project
+browsing. Both secondary destinations have Back to Chats.
+
+The home search is followed by horizontally scrolling, single-selection machine
+chips: **All** (default), then registered machine names. Filtering uses connector
+IDs, so rename does not change selection. The lazy list combines root chats from
+authorized projects, pinned first and otherwise most recently updated first.
+Rows identify machine and project; a tap opens the conversation directly. Back
+restores the list's filter, search and scroll. Long press retains pin/delete
+actions. New chat opens an online authorized-project chooser scoped to the filter;
+choosing it only opens a draft, not a remote session.
+
+Discovery and pagination use the existing encrypted project/chat requests,
+serialized across sources with existing per-project retention and page limits.
+Search filters loaded titles and continues pagination near the end of results.
+An unavailable machine cannot block the other sources. Offline machines stay in
+the chips and show availability guidance; already loaded rows are last-known and
+cannot open offline. Cold starts cannot fetch their chats. Summaries and drafts
+remain in account-scoped memory, never ordinary preferences or server storage.
+Drafts survive returning to the list; revocation, identity loss, project removal
+and logout discard affected index/draft state. Results received after suspension,
+revocation or disposal cannot repopulate that state. No new remote capability,
+automatic mutation retry, trust grant or sensitive logging is introduced.
+
 Settings displays app-wide, per-device Chat display switches for thinking
 messages and image previews, both on by default, followed by the authenticated
 account and Sign out. The green indicator

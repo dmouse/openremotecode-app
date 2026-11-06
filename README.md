@@ -12,7 +12,10 @@ See [Naming and Service Hosts](../README.md#naming-and-service-hosts)
 for the landing page and API/relay hosts.
 
 Native Flutter client with real server authentication, secure session restoration,
-a connections home, and short-code pairing. The main color is `#DBF4AD`.
+a Chats home with machine filters, and short-code pairing. The top-right menu
+offers Connect (remote-machine management) and Settings. Conversations open
+directly from the combined list; Back restores the list and its search/filter.
+The main color is `#DBF4AD`.
 UI widgets depend on view models and repositories; networking, storage, and
 cryptography stay outside widgets.
 
@@ -111,7 +114,7 @@ devices using that connector; local OpenCode chats remain. Failed requests keep
 the connection for retry. The account must own the connector, but this device
 does not need its pairing keys to revoke it.
 
-The white Connections home lists authorized connectors, puts online peers first,
+The Connect screen lists authorized connectors, puts online peers first,
 and retains offline peers. Unknown presence and identities requiring verification
 are labeled explicitly. Add connection accepts one short typed or pasted code.
 Compare the safety code with OpenCode. If they match, approve the phone in OpenCode's dialog, then explicitly confirm in the app; confirmation waits for that approval.

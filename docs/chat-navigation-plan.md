@@ -4,9 +4,12 @@ Status: first functional iteration implemented, 2026-09-05.
 
 ## Available flow
 
-Double-tap a verified connection, or use **Open projects**, to follow
-**Connection → Project → Chats → Conversation**. Single tap still selects a
-connection. Back moves through those screens in reverse order.
+The default home now follows **Chats → Conversation**. It combines authorized
+projects across verified machines, with machine-name chips below search. The
+top-right menu contains **Connect** and **Settings**, each returning directly to
+Chats. Connect manages registered machines; it does not open a project browser.
+Existing per-connector project/chat views remain internal reusable components.
+See [Home and navigation](design.md#home-and-navigation) for current behavior.
 
 Projects are the connector's explicitly enabled existing working directories.
 Open a project in the OpenCode TUI and use `/remote` to enable access for that
