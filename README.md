@@ -195,7 +195,9 @@ Rendered Flutter design previews (synthetic sample data):
 [connections](docs/previews/connections.png), [settings](docs/previews/settings.png),
 [projects](docs/previews/projects.png), [chats](docs/previews/chats.png),
 [conversation](docs/previews/chat-thoughts.png), [sub-agent task](docs/previews/chat-subtasks.png),
-and [child conversation](docs/previews/subtask-chat.png).
+[child conversation](docs/previews/subtask-chat.png), and conversations with
+[voice available](docs/previews/chat-voice-available.png) or
+[voice unavailable](docs/previews/chat-voice-unavailable.png).
 Regenerate them all with `flutter test tool/render_previews_test.dart`
 (`PREVIEW_DIR` overrides the output directory); re-run it after any UI change.
 The root pnpm scripts do not run Flutter checks.

@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openremotecode/app.dart';
 import 'package:openremotecode/features/chat/data/chat_repository.dart';
 import 'package:openremotecode/features/chat/ui/chat_flow_screen.dart';
+import 'package:openremotecode/features/chat/domain/voice_recorder.dart';
 import 'package:openremotecode/features/server_settings/domain/server_endpoint.dart';
 import 'package:openremotecode/ui/core/app_theme.dart';
 
@@ -25,6 +26,18 @@ import '../test/support/connections_fakes.dart';
 import '../test/support/memory_server_settings_repository.dart';
 
 final _shot = GlobalKey();
+
+class _PreviewVoiceRecorder implements VoiceRecorder {
+  @override
+  Future<bool> requestPermission() async => false;
+  @override
+  Future<Stream<Uint8List>> start() async => const Stream.empty();
+  @override
+  Future<void> stop() async {}
+  @override
+  Future<void> dispose() async {}
+}
+
 final _out = Platform.environment['PREVIEW_DIR'] ?? 'docs/previews';
 const _server = 'http://127.0.0.1:8080';
 
@@ -214,8 +227,9 @@ List<Map<String, dynamic>> _parts(bool withTask) => [
 ];
 
 final class _SampleChats implements ChatRepository {
-  _SampleChats({this.withTask = false});
+  _SampleChats({this.withTask = false, this.voiceAvailable = false});
   final bool withTask;
+  bool voiceAvailable;
   final changes = StreamController<void>.broadcast();
 
   @override
@@ -257,6 +271,8 @@ final class _SampleChats implements ChatRepository {
     Map<String, dynamic> body,
   ) async {
     switch (operation) {
+      case 'voice.status':
+        return {'version': 1, 'available': voiceAvailable};
       case 'project.list':
         return {
           'version': 1,
@@ -356,6 +372,7 @@ Future<void> _pumpChat(WidgetTester tester, _SampleChats repo) async {
           repository: repo,
           connectorId: 'sample',
           connectionName: 'Workstation',
+          voiceRecorderFactory: _PreviewVoiceRecorder.new,
         ),
       ),
     ),
@@ -403,13 +420,13 @@ void main() {
     await _pumpApp(tester, connections: repo, signedIn: true);
     await _capture(tester, 'workspace');
 
-    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.tap(find.byTooltip('App options'));
     await tester.pumpAndSettle();
     await _capture(tester, 'workspace-sidebar');
-    await tester.tapAt(const Offset(370, 400));
+    await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Enter pairing code'));
+    await tester.tap(find.byTooltip('Add connection'));
     await tester.pumpAndSettle();
     await _capture(tester, 'pairing-code');
     await tester.enterText(find.byType(TextFormField), 'abcd-efgh');
@@ -420,7 +437,9 @@ void main() {
     await tester.pumpAndSettle();
     await _capture(tester, 'connections');
 
-    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('App options'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
@@ -441,6 +460,22 @@ void main() {
     await _pumpChat(tester, _SampleChats());
     await _openConversation(tester);
     await _capture(tester, 'chat-thoughts');
+  });
+
+  testWidgets('conversation voice availability', (tester) async {
+    await _size(tester, const Size(420, 860), 1);
+    final repo = _SampleChats(voiceAvailable: true);
+    await _pumpChat(tester, repo);
+    await _openConversation(tester);
+    expect(find.byKey(const ValueKey('voice-note')), findsOneWidget);
+    expect(find.byKey(const ValueKey('voice-call')), findsOneWidget);
+    await _capture(tester, 'chat-voice-available');
+    repo.voiceAvailable = false;
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('voice-note')), findsNothing);
+    expect(find.byKey(const ValueKey('voice-call')), findsNothing);
+    await _capture(tester, 'chat-voice-unavailable');
   });
 
   testWidgets('conversation with a sub-agent task', (tester) async {
