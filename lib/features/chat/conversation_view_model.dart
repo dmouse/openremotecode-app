@@ -787,6 +787,22 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     }
   }
 
+  /// A call needs a stable chat before its first automatic prompt. Creation
+  /// uses the same uncertainty guard as the first typed prompt.
+  Future<bool> prepareVoiceCall() async {
+    if (!canSend) return false;
+    if (chat != null) return true;
+    var ready = false;
+    await run(
+      (generation) async {
+        ready = await _createForPrompt(generation);
+      },
+      mutation: true,
+      onFailure: _handleFailure,
+    );
+    return ready && canSend && chat != null;
+  }
+
   Future<bool> send(String input) async {
     if (input.trim().isEmpty || input.length > 32000 || !canSend) {
       return false;

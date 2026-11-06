@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../../../ui/core/app_theme.dart';
 import '../../../ui/core/confirm_dialog.dart';
 import '../conversation_view_model.dart';
+import '../voice_view_model.dart';
+import 'voice_controls.dart';
 
 /// The conversation's draft input row: the message field, its model/effort
 /// suffix button, and the primary button, which is the send button
@@ -23,6 +25,7 @@ class ChatComposerBar extends StatelessWidget {
     required this.online,
     required this.onOpenModelBanner,
     required this.onChoosePromptMode,
+    this.voice,
   });
 
   final ConversationViewModel model;
@@ -32,6 +35,7 @@ class ChatComposerBar extends StatelessWidget {
   final bool online;
   final VoidCallback onOpenModelBanner;
   final VoidCallback onChoosePromptMode;
+  final VoiceViewModel? voice;
 
   /// Asks before aborting, since stopping the agent discards in-flight work,
   /// then aborts only if the session is still live and still working when the
@@ -109,6 +113,9 @@ class ChatComposerBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            if (voice case final voice?)
+              if (voice.showControls)
+                VoiceNoteButton(voice: voice, enabled: online && !busy),
             ValueListenableBuilder(
               valueListenable: draft,
               builder: (context, value, _) {
@@ -178,7 +185,9 @@ class ChatComposerBar extends StatelessWidget {
                               ? online && !busy
                                     ? () => unawaited(_confirmStop(context))
                                     : null
-                              : model.canSend && value.text.trim().isNotEmpty
+                              : model.canSend &&
+                                    value.text.trim().isNotEmpty &&
+                                    !(voice?.active ?? false)
                               ? () async {
                                   final text = draft.text;
                                   final accepted = answeringQuestion

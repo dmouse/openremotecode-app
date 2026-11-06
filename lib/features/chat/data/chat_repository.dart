@@ -53,6 +53,9 @@ enum ChatFailure implements Exception {
   chatBusy,
   pinStorage,
   pinLimit,
+  voiceUnavailable,
+  voiceBusy,
+  voiceExpired,
   invalid;
 
   String get message => switch (this) {
@@ -69,6 +72,10 @@ enum ChatFailure implements Exception {
     chatBusy => 'Stop the response before changing this chat.',
     pinStorage => 'Chat pins could not be saved or loaded. Please try again.',
     pinLimit => 'You can pin up to 20 chats per project. Unpin a chat first.',
+    voiceUnavailable =>
+      'Open Hex on your computer and load a speech model to use voice input.',
+    voiceBusy => 'Hex is busy with another voice stream. Try again shortly.',
+    voiceExpired => 'The voice connection ended. Start a new recording.',
   };
 }
 
@@ -211,6 +218,9 @@ final class RelayRequests {
           'uncertain_outcome' => ChatFailure.uncertain,
           'chat_not_found' => ChatFailure.notFound,
           'chat_busy' => ChatFailure.chatBusy,
+          'voice_unavailable' => ChatFailure.voiceUnavailable,
+          'voice_busy' => ChatFailure.voiceBusy,
+          'voice_expired' => ChatFailure.voiceExpired,
           _ => ChatFailure.unavailable,
         });
       } else if (payload['operation'] == entry.operation &&

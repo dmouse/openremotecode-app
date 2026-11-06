@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../../../ui/core/app_theme.dart';
 import '../chat_view_model.dart';
+import '../voice_view_model.dart';
 import 'conversation_header.dart';
+import 'voice_controls.dart';
 
 /// Builds the chat flow's app bar: title varies by page (connection name,
 /// project name, or the conversation header), with a "Chat options" menu on
@@ -27,6 +29,8 @@ class ChatFlowAppBar {
     required VoidCallback onBack,
     required VoidCallback onOpenDetails,
     required VoidCallback onRename,
+    VoiceViewModel? voice,
+    VoidCallback? onStartCall,
   }) {
     final page = model.page;
     final conversation = model.conversation;
@@ -62,6 +66,16 @@ class ChatFlowAppBar {
               child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
       actions: [
+        if (page == ChatPage.conversation &&
+            !model.isSubtask &&
+            voice != null &&
+            voice.showControls &&
+            onStartCall != null)
+          VoiceCallButton(
+            voice: voice,
+            onStart: onStartCall,
+            enabled: model.online && !busy,
+          ),
         if (page == ChatPage.chats || page == ChatPage.projects)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),

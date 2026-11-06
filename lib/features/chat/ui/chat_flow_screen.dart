@@ -6,6 +6,9 @@ import '../../../ui/core/app_theme.dart';
 import '../../../ui/core/inline_notice.dart';
 import '../chat_view_model.dart';
 import '../data/chat_repository.dart';
+import '../data/voice_transport.dart';
+import '../domain/voice_recorder.dart';
+import '../voice_view_model.dart';
 import '../domain/chat_models.dart';
 import 'chat_composer_bar.dart';
 import 'chat_details_screen.dart';
@@ -17,6 +20,7 @@ import 'model_list_sheet.dart';
 import 'projects_view.dart';
 import 'rename_chat_dialog.dart';
 import 'todo_banner.dart';
+import 'voice_controls.dart';
 import '../../settings/settings_view_model.dart';
 
 class ChatFlowScreen extends StatefulWidget {
@@ -26,6 +30,7 @@ class ChatFlowScreen extends StatefulWidget {
     required this.connectorId,
     required this.connectionName,
     this.settings,
+    this.voiceRecorderFactory,
     this.initialProject,
     this.initialChat,
     this.directConversation = false,
@@ -41,7 +46,8 @@ class ChatFlowScreen extends StatefulWidget {
     required this.parentSessionId,
     required this.subtaskDepth,
     required this.settings,
-  }) : directConversation = false,
+  }) : voiceRecorderFactory = null,
+       directConversation = false,
        drafts = null;
   final ChatRepository repository;
   final String connectorId, connectionName;
@@ -50,6 +56,7 @@ class ChatFlowScreen extends StatefulWidget {
   final String? parentSessionId;
   final int subtaskDepth;
   final SettingsViewModel? settings;
+  final VoiceRecorder Function()? voiceRecorderFactory;
   final bool directConversation;
   final Map<String, String>? drafts;
   @override
@@ -68,6 +75,8 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   final draft = TextEditingController();
   final _composerFocus = FocusNode();
   final _modelSearch = TextEditingController();
+  VoiceViewModel? _voice;
+  bool _foreground = true;
   ChatPage? previousPage;
   String? previousChat;
   late final _drafts = widget.drafts ?? <String, String>{};
@@ -81,6 +90,40 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final factory = widget.voiceRecorderFactory;
+    if (factory != null && !model.isSubtask) {
+      _voice = VoiceViewModel(
+        transport: VoiceTransport(widget.repository, widget.connectorId),
+        recorder: factory(),
+        context: () {
+          final project = model.project;
+          final conversation = model.conversation;
+          final key = conversation.composerKey;
+          if (project == null ||
+              key == null ||
+              model.trustLost ||
+              _detailsOpen ||
+              _subtaskOpen ||
+              conversation.permission != null ||
+              conversation.question != null) {
+            return null;
+          }
+          return VoiceContext(project.id, key, conversation.chat?.id);
+        },
+        send: model.conversation.send,
+        appendDraft: (text) {
+          // Typing during recording is preserved. No transcript can target a
+          // different chat: VoiceViewModel checks the captured context first.
+          final next = draft.text.isEmpty ? text : '${draft.text}\n$text';
+          if (next.length > 32000) return false;
+          draft.value = TextEditingValue(
+            text: next,
+            selection: TextSelection.collapsed(offset: next.length),
+          );
+          return true;
+        },
+      );
+    }
     model.addListener(_changed);
     if (widget.initialChat case final chat?) {
       model.project = widget.initialProject;
@@ -102,6 +145,8 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
         }
       });
     }
+    _syncVoice();
+    _voice?.contextChanged();
     if (model.isSubtask && (model.trustLost || model.project == null)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && ModalRoute.of(context)?.isCurrent == true) {
@@ -146,8 +191,28 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) =>
-      model.setActive(state == AppLifecycleState.resumed);
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // A permission sheet can make the app inactive before capture starts.
+    if (state != AppLifecycleState.resumed &&
+        (state != AppLifecycleState.inactive ||
+            _voice?.phase != VoicePhase.starting)) {
+      unawaited(_voice?.cancel());
+    }
+    _foreground =
+        state == AppLifecycleState.resumed ||
+        (state == AppLifecycleState.inactive &&
+            _voice?.phase == VoicePhase.starting);
+    _syncVoice();
+    model.setActive(state == AppLifecycleState.resumed);
+  }
+
+  void _syncVoice() => _voice?.setMonitoring(
+    _foreground &&
+        model.page == ChatPage.conversation &&
+        !_detailsOpen &&
+        !_subtaskOpen,
+  );
+
   @override
   void dispose() {
     if (!model.trustLost && previousChat != null) {
@@ -156,6 +221,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
     }
     WidgetsBinding.instance.removeObserver(this);
     model.removeListener(_changed);
+    _voice?.dispose();
     model.dispose();
     search.dispose();
     draft.dispose();
@@ -175,6 +241,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   }
 
   Future<void> _choosePromptMode() async {
+    if (_voice?.active ?? false) return;
     if (_modePickerOpen || !model.conversation.canChangePromptMode) return;
     final source = model.conversation.composerKey;
     _modePickerOpen = true;
@@ -240,6 +307,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   /// the slider is there to set them. The provider list is fetched on the way
   /// open -- never on chat load.
   Future<void> _openModelBanner() async {
+    if (_voice?.active ?? false) return;
     if (_modelBannerOpen || !model.conversation.canChangeModel) return;
     final source = model.conversation.composerKey;
     _modelBannerOpen = true;
@@ -357,6 +425,9 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       return;
     }
     _detailsOpen = true;
+    _syncVoice();
+    await _voice?.cancel();
+    if (!mounted) return;
     model.conversation.setCovered(true);
     FocusManager.instance.primaryFocus?.unfocus();
     try {
@@ -368,6 +439,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       );
     } finally {
       _detailsOpen = false;
+      _syncVoice();
       if (mounted) model.conversation.setCovered(false);
     }
   }
@@ -386,6 +458,9 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       return;
     }
     _subtaskOpen = true;
+    _syncVoice();
+    await _voice?.cancel();
+    if (!mounted) return;
     model.conversation.setCovered(true);
     FocusManager.instance.primaryFocus?.unfocus();
     try {
@@ -411,13 +486,14 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       );
     } finally {
       _subtaskOpen = false;
+      _syncVoice();
       if (mounted) model.conversation.setCovered(false);
     }
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: model,
+    listenable: Listenable.merge([model, ?_voice]),
     builder: (context, _) {
       final busy = model.loading || model.mutating;
       final title = switch (model.page) {
@@ -451,6 +527,8 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
             },
             onOpenDetails: _openDetails,
             onRename: () => unawaited(_renameChat()),
+            voice: _voice,
+            onStartCall: () => unawaited(_startCall()),
           ),
           body: SafeArea(
             child: Column(
@@ -497,6 +575,8 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
                   },
                 ),
                 if (model.page == ChatPage.conversation && !model.isSubtask)
+                  if (_voice case final voice?) VoiceStatusBar(voice: voice),
+                if (model.page == ChatPage.conversation && !model.isSubtask)
                   ChatComposerBar(
                     model: model.conversation,
                     draft: draft,
@@ -505,6 +585,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
                     online: model.online,
                     onOpenModelBanner: _openModelBanner,
                     onChoosePromptMode: _choosePromptMode,
+                    voice: _voice,
                   ),
               ],
             ),
@@ -513,4 +594,11 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       );
     },
   );
+
+  Future<void> _startCall() async {
+    final voice = _voice;
+    if (voice == null || !voice.canStart) return;
+    if (!await model.conversation.prepareVoiceCall() || !mounted) return;
+    await voice.start(VoiceMode.call);
+  }
 }

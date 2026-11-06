@@ -18,6 +18,7 @@ import '../../chat/ui/chats_home_view.dart';
 import 'workspace_settings_view.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/ui/chat_flow_screen.dart';
+import '../../chat/domain/voice_recorder.dart';
 
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({
@@ -25,10 +26,12 @@ class WorkspaceScreen extends StatefulWidget {
     required this.repository,
     required this.auth,
     this.settings,
+    this.voiceRecorderFactory,
   });
   final ConnectionsRepository repository;
   final AuthRepository auth;
   final SettingsViewModel? settings;
+  final VoiceRecorder Function()? voiceRecorderFactory;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -74,6 +77,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
             directConversation: true,
             drafts: drafts,
             settings: _settings,
+            voiceRecorderFactory: widget.voiceRecorderFactory,
           ),
         ),
       );

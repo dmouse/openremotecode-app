@@ -199,3 +199,29 @@ and [child conversation](docs/previews/subtask-chat.png).
 Regenerate them all with `flutter test tool/render_previews_test.dart`
 (`PREVIEW_DIR` overrides the output directory); re-run it after any UI change.
 The root pnpm scripts do not run Flutter checks.
+
+## Voice notes and calls
+
+Keep Hex running on the paired computer with a GGUF speech model loaded (Hex
+3.3.0 / streaming API 2 is the integration target). Update the Open Remote Code
+plugin as well as the mobile app; older connectors do not advertise voice support.
+No extra server address, public port, or cloud speech credentials are needed.
+Both voice buttons stay hidden until the connector confirms that Hex's local
+streaming API is running. Availability refreshes on entering/resuming a chat,
+after reconnecting, and every ten seconds while the chat is visible. Stopping Hex
+hides the buttons and stops capture; starting it restores them on the next check.
+An older connector without `voice.status` keeps voice controls hidden. A running
+API can still be busy or lack a loaded model; those conditions show a recoverable
+error when starting voice.
+
+Tap the microphone beside Send to record a quick note, then Stop to append the
+transcript to your draft. Tap Call in the chat header to keep listening and send
+completed utterances automatically after a pause. The call has Mute and Hang up;
+OpenCode replies as text. Mute discards unfinished speech. Calls stop when leaving
+the chat, backgrounding, disconnecting, or waiting for an explicit permission or
+question response. Speech detection is based on audio level and pauses; use quick
+notes when you want to review wording before sending.
+
+Recordings remain in memory and are streamed end-to-end encrypted to the local
+connector. See the [voice contract](../packages/protocol/VOICE.md) for limits,
+failure behavior and the [threat analysis](../packages/agents/opencode/docs/adr/0019-hex-voice-input.md).
