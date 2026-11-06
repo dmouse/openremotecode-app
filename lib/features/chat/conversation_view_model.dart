@@ -9,6 +9,8 @@ import 'data/chat_repository.dart';
 import 'data/chat_stream.dart';
 import 'domain/chat_models.dart';
 import 'model_selection_view_model.dart';
+import 'domain/voice_note.dart';
+import 'voice_playback_view_model.dart';
 
 enum PromptMode { build, plan }
 
@@ -96,6 +98,8 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   final ModelSelectionViewModel models;
   final bool Function() readShowImages;
   final bool Function() readShowThinkingMessages;
+  VoiceNote? Function(String id)? voiceNoteForId;
+  VoicePlaybackViewModel? voicePlayback;
   late final ChatStream _stream;
 
   bool _disposed = false;

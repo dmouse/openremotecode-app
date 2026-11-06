@@ -9,6 +9,8 @@ import '../domain/chat_models.dart';
 import '../domain/tool_run.dart';
 import 'image_message.dart';
 import 'markdown_message.dart';
+import 'voice_note_bubble.dart';
+import '../domain/voice_note.dart';
 import 'subtask_view.dart';
 import 'thought_view.dart';
 import 'tool_run_view.dart';
@@ -735,7 +737,16 @@ class ConversationViewState extends State<ConversationView> {
                   key: _messageAnchors.putIfAbsent(message.id, GlobalKey.new),
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (mergedRuns[message.id] case final run?)
+                    if (message.role == 'user' &&
+                        VoiceNote.parse(message.text) != null)
+                      VoiceNoteBubble(
+                        transcript: VoiceNote.parse(message.text)!.transcript,
+                        note: model.voiceNoteForId?.call(
+                          VoiceNote.parse(message.text)!.id,
+                        ),
+                        playback: model.voicePlayback,
+                      )
+                    else if (mergedRuns[message.id] case final run?)
                       ToolRunView(
                         key: ValueKey('run-${run.parts.first.id}'),
                         run: run,

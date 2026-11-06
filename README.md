@@ -216,13 +216,21 @@ An older connector without `voice.status` keeps voice controls hidden. A running
 API can still be busy or lack a loaded model; those conditions show a recoverable
 error when starting voice.
 
-Tap the microphone beside Send to record a quick note, then Stop to append the
-transcript to your draft. Tap Call in the chat header to keep listening and send
+Tap the microphone beside Send to record a voice note. Its level reacts to speech;
+Stop opens a playback preview with Send and Discard. Sending keeps an audio bubble
+in the conversation and uses local transcription as the agent's input, without
+replacing your typed draft. Transcribe reveals the transcript beneath the bubble;
+it does not submit another prompt. Up to eight recordings remain in workspace
+memory. After an app restart or eviction, the transcript remains in OpenCode but
+the bubble says audio is unavailable on this device. Audio is never cached to disk.
+See [voice-note presentation and threat analysis](docs/adr/0006-voice-note-presentation.md).
+
+Tap Call in the chat header to keep listening and send
 completed utterances automatically after a pause. The call has Mute and Hang up;
 OpenCode replies as text. Mute discards unfinished speech. Calls stop when leaving
 the chat, backgrounding, disconnecting, or waiting for an explicit permission or
 question response. Speech detection is based on audio level and pauses; use quick
-notes when you want to review wording before sending.
+notes when you want to review the recording before sending.
 
 Recordings remain in memory and are streamed end-to-end encrypted to the local
 connector. See the [voice contract](../packages/protocol/VOICE.md) for limits,

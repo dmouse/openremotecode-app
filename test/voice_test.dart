@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openremotecode/features/chat/data/chat_repository.dart';
 import 'package:openremotecode/features/chat/data/voice_transport.dart';
 import 'package:openremotecode/features/chat/domain/voice_recorder.dart';
+import 'package:openremotecode/features/chat/domain/voice_note.dart';
 import 'package:openremotecode/features/chat/ui/voice_controls.dart';
 import 'package:openremotecode/features/chat/ui/chat_flow_screen.dart';
 import 'package:openremotecode/features/chat/voice_view_model.dart';
@@ -158,6 +159,10 @@ class Harness {
       drafts.add(text);
       return true;
     },
+    sendNote: (note) async {
+      sent.add(note.prompt);
+      return accepted;
+    },
   );
   Future<void> frames(int count, {bool speech = true}) async {
     for (var i = 0; i < count; i++) {
@@ -229,7 +234,15 @@ class ScreenRepository extends Repository {
         'version': 1,
         'chat': summary,
         'status': 'idle',
-        'messages': [],
+        'messages': [
+          for (final entry in prompts.asMap().entries)
+            {
+              'id': 'voice-message-${entry.key}',
+              'role': 'user',
+              'text': entry.value,
+              'truncated': false,
+            },
+        ],
         'cursor': null,
       },
       'chat.prompt' => {'version': 1, 'accepted': true},
@@ -466,8 +479,18 @@ void main() {
       await tester.runAsync(flush);
       await tester.tap(note);
       await settleVoice(tester);
-      expect(find.text('Typed draft\n${repo.transcript}'), findsOneWidget);
+      expect(find.text('Typed draft'), findsOneWidget);
+      expect(find.text('Voice note · Not sent'), findsOneWidget);
       expect(repo.prompts, isEmpty);
+      await tester.tap(find.text('Transcribe'));
+      await tester.pump();
+      expect(find.text(repo.transcript), findsOneWidget);
+      expect(repo.prompts, isEmpty);
+      await tester.tap(find.text('Send voice note'));
+      await settleVoice(tester);
+      expect(VoiceNote.parse(repo.prompts.single)!.transcript, repo.transcript);
+      expect(find.text('Voice note'), findsOneWidget);
+      expect(find.text(repo.transcript), findsNothing);
       await tester.tap(call);
       await settleVoice(tester);
       expect(find.byTooltip('End voice call'), findsOneWidget);
@@ -476,8 +499,9 @@ void main() {
         await tester.runAsync(flush);
         await tester.pump();
       }
-      expect(repo.prompts, [repo.transcript]);
-      expect(find.text('Typed draft\n${repo.transcript}'), findsOneWidget);
+      expect(repo.prompts.last, repo.transcript);
+      expect(repo.prompts.length, 2);
+      expect(find.text('Typed draft'), findsOneWidget);
       // Leaving a conversation ends capture; the current text draft remains separate.
       await tester.tap(find.byType(BackButton));
       await tester.runAsync(flush);
@@ -517,7 +541,7 @@ void main() {
     await expectLater(turn.append(Uint8List(1)), throwsA(ChatFailure.invalid));
   });
 
-  test('quick note fills a draft once and never sends a prompt', () async {
+  test('quick note previews audio without filling the draft or automatically sending', () async {
     final h = Harness();
     await h.model.refreshAvailability();
     await h.model.start(VoiceMode.note);
@@ -529,7 +553,12 @@ void main() {
     await flush();
     expect(h.recorder.starts, 1);
     expect(h.sent, isEmpty);
-    expect(h.drafts, [h.repo.transcript]);
+    expect(h.drafts, isEmpty);
+    expect(h.model.phase, VoicePhase.preview);
+    expect(h.model.pendingNote!.audio.length, 16000);
+    await h.model.submitNote();
+    expect(h.sent.length, 1);
+    expect(VoiceNote.parse(h.sent.single)!.transcript, h.repo.transcript);
     expect(h.model.active, isFalse);
     await h.close();
   });
@@ -725,7 +754,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('voice-note')));
       await tester.pump();
       expect(h.model.isNote, isTrue);
-      expect(find.byTooltip('Stop recording and use text'), findsOneWidget);
+      expect(find.byTooltip('Stop recording and preview'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.runAsync(h.model.cancel);
       await tester.pump();

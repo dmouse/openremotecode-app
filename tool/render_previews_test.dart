@@ -20,6 +20,10 @@ import 'package:openremotecode/features/chat/ui/chat_flow_screen.dart';
 import 'package:openremotecode/features/chat/domain/voice_recorder.dart';
 import 'package:openremotecode/features/server_settings/domain/server_endpoint.dart';
 import 'package:openremotecode/ui/core/app_theme.dart';
+import 'package:openremotecode/features/chat/domain/voice_note.dart';
+import 'package:openremotecode/features/chat/ui/voice_note_bubble.dart';
+import 'package:openremotecode/ui/core/chat_avatar.dart';
+import 'package:openremotecode/features/connections/domain/connection_color.dart';
 
 import '../test/support/auth_fakes.dart';
 import '../test/support/connections_fakes.dart';
@@ -389,6 +393,63 @@ Future<void> _openConversation(WidgetTester tester) async {
 
 void main() {
   setUpAll(_loadFonts);
+
+  testWidgets('voice note presentation in light and dark', (tester) async {
+    await _size(tester, const Size(390, 844), 2);
+    final note = VoiceNote(
+      id: '11111111-1111-4111-8111-111111111111',
+      audio: Uint8List(96000),
+      transcript:
+          'Review the current changes and explain what needs attention.',
+    );
+    for (final theme in [AppTheme.light, AppTheme.dark]) {
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _shot,
+          child: MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              appBar: AppBar(
+                leading: const BackButton(),
+                title: const Row(
+                  children: [
+                    ChatAvatar(color: ConnectionColor.blue, size: 32),
+                    SizedBox(width: 12),
+                    Text('Review changes'),
+                  ],
+                ),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  const Text(
+                    'I can review those changes. What would you like me to focus on?',
+                  ),
+                  const SizedBox(height: 24),
+                  VoiceNoteBubble(
+                    key: ValueKey(theme.brightness),
+                    note: note,
+                    transcript: note.transcript,
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'I’ll review the changes and highlight anything that needs attention.',
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Playback is temporary on the recording device. The transcript remains in the conversation.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await _capture(tester, 'voice-note-${theme.brightness.name}');
+      await tester.tap(find.text('Transcribe'));
+      await _capture(tester, 'voice-note-${theme.brightness.name}-transcript');
+    }
+  });
 
   testWidgets('signed-out screens', (tester) async {
     await _size(tester, const Size(390, 844), 2);

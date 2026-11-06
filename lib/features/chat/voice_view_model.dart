@@ -8,10 +8,20 @@ import 'package:flutter/foundation.dart';
 import 'data/chat_repository.dart';
 import 'data/voice_transport.dart';
 import 'domain/voice_recorder.dart';
+import 'domain/voice_note.dart';
+import 'data/relay_crypto.dart';
 
 enum VoiceMode { note, call }
 
-enum VoicePhase { idle, starting, listening, transcribing, sending, stopping }
+enum VoicePhase {
+  idle,
+  starting,
+  listening,
+  transcribing,
+  preview,
+  sending,
+  stopping,
+}
 
 /// One foreground capture, with a bounded queue while Hex finishes a turn.
 /// Partial transcriptions never become prompts. Only explicit call mode auto-sends.
@@ -22,12 +32,34 @@ final class VoiceViewModel extends ChangeNotifier {
     required this.context,
     required this.send,
     required this.appendDraft,
+    this.sendNote,
+    this.beforeRecording,
+    this.canSubmitNote,
   });
   final VoiceTransport transport;
   final VoiceRecorder recorder;
   final VoiceContext? Function() context;
   final Future<bool> Function(String) send;
   final bool Function(String) appendDraft;
+  final Future<bool> Function(VoiceNote)? sendNote;
+  final Future<void> Function()? beforeRecording;
+  final bool Function()? canSubmitNote;
+  final level = ValueNotifier<double>(0);
+  final recordedDuration = ValueNotifier<int>(0);
+  final _noteAudio = BytesBuilder(copy: true);
+  VoiceNote? pendingNote;
+  int get recordedMilliseconds => _noteAudio.length ~/ 32;
+  bool _noteAttempted = false;
+  bool get noteDeliveryUnconfirmed =>
+      _noteAttempted && phase == VoicePhase.preview;
+  bool get canSendNote =>
+      phase == VoicePhase.preview &&
+      pendingNote != null &&
+      !_noteAttempted &&
+      available &&
+      sendNote != null &&
+      (canSubmitNote?.call() ?? true);
+  DateTime _lastLevel = DateTime.fromMillisecondsSinceEpoch(0);
   VoicePhase phase = VoicePhase.idle;
   VoiceMode? mode;
   String? error;
@@ -85,8 +117,9 @@ final class VoiceViewModel extends ChangeNotifier {
           ? 'Microphone muted'
           : isCall
           ? 'Listening · speech sends after a pause'
-          : 'Recording voice note · tap Stop to use text',
+          : 'Recording voice note · tap Stop to preview',
     VoicePhase.transcribing => 'Transcribing…',
+    VoicePhase.preview => 'Voice note preview · not sent',
     VoicePhase.sending => 'Sending voice message…',
     VoicePhase.stopping => 'Ending recording…',
   };
@@ -173,9 +206,16 @@ final class VoiceViewModel extends ChangeNotifier {
     mode = selected;
     error = lastTranscript = null;
     muted = _finishingNote = _stoppingNote = false;
+    pendingNote = null;
+    _noteAttempted = false;
+    _noteAudio.clear();
+    level.value = 0;
+    recordedDuration.value = 0;
     phase = VoicePhase.starting;
     _notify();
     try {
+      await beforeRecording?.call();
+      if (!_valid(run)) return;
       if (!await recorder.requestPermission()) {
         throw const _VoiceFailure(
           'Allow microphone access to use voice input.',
@@ -230,6 +270,17 @@ final class VoiceViewModel extends ChangeNotifier {
   }
 
   void contextChanged() {
+    final next = context();
+    // Explicit Send may create this draft's first session. No other context
+    // transition is allowed to carry a recording into a different chat.
+    if (isNote &&
+        phase == VoicePhase.sending &&
+        _context?.sessionId == null &&
+        next != null &&
+        next.sessionId != null &&
+        next.projectId == _context?.projectId) {
+      _context = next;
+    }
     if (!transport.online ||
         !transport.supported ||
         (_availabilityPeer != null &&
@@ -260,6 +311,13 @@ final class VoiceViewModel extends ChangeNotifier {
     if (!_valid(run) || phase == VoicePhase.stopping) return;
     _lastAudio = DateTime.now();
     if (muted) return;
+    if (mode == VoiceMode.note) {
+      if (bytes.length.isOdd || _noteAudio.length + bytes.length > 1920000) {
+        unawaited(finishNote());
+        return;
+      }
+      _noteAudio.add(bytes);
+    }
     if (bytes.length > 160000 ||
         _queuedBytes + _remainder.length + bytes.length > 160000) {
       unawaited(
@@ -268,6 +326,18 @@ final class VoiceViewModel extends ChangeNotifier {
         ),
       );
       return;
+    }
+    if (DateTime.now().difference(_lastLevel).inMilliseconds >= 100 &&
+        bytes.isNotEmpty) {
+      final samples = ByteData.sublistView(bytes);
+      var energy = 0.0;
+      for (var i = 0; i + 1 < bytes.length; i += 2) {
+        final sample = samples.getInt16(i, Endian.little) / 32768;
+        energy += sample * sample;
+      }
+      level.value = (sqrt(energy / max(1, bytes.length ~/ 2)) * 8).clamp(0, 1);
+      recordedDuration.value = recordedMilliseconds;
+      _lastLevel = DateTime.now();
     }
     _remainder.add(bytes);
     final data = _remainder.takeBytes();
@@ -334,6 +404,10 @@ final class VoiceViewModel extends ChangeNotifier {
         if (boundary) {
           await _finishTurn(run, autoSend: true);
         } else if (_turnBytes >= 1920000) {
+          if (mode == VoiceMode.note) {
+            await finishNote();
+            break;
+          }
           // Never split a long instruction into an automatically sent partial prompt.
           await _finishTurn(run, autoSend: false);
           if (_valid(run)) {
@@ -350,7 +424,7 @@ final class VoiceViewModel extends ChangeNotifier {
       }
       if (_valid(run) && _finishingNote && _queuedBytes == 0) {
         await _finishTurn(run, autoSend: false);
-        if (_valid(run)) await cancel();
+        if (_valid(run) && mode != VoiceMode.note) await cancel();
       }
     } catch (failure) {
       if (run == _generation) await _fail(_message(failure));
@@ -372,6 +446,26 @@ final class VoiceViewModel extends ChangeNotifier {
     if (!_valid(run)) return;
     _turn = null;
     lastTranscript = text.isEmpty ? null : text;
+    if (mode == VoiceMode.note && !autoSend) {
+      final audio = _noteAudio.takeBytes();
+      if (text.isEmpty || audio.isEmpty) {
+        await _fail('No speech was recognized. Record another voice note.');
+        return;
+      }
+      final id = requestId();
+      if (VoiceNote.formatPrompt(id, text).length > 32000) {
+        await _fail('The transcript is too long. Record a shorter voice note.');
+        return;
+      }
+      pendingNote = VoiceNote(id: id, audio: audio, transcript: text);
+      _watchdog?.cancel();
+      _watchdog = null;
+      level.value = 0;
+      phase = VoicePhase.preview;
+      _finishingNote = false;
+      _notify();
+      return;
+    }
     if (text.isNotEmpty) {
       if (autoSend) {
         phase = VoicePhase.sending;
@@ -423,12 +517,38 @@ final class VoiceViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> submitNote() async {
+    final note = pendingNote;
+    if (!canSendNote || note == null || sendNote == null) return;
+    final run = _generation;
+    _noteAttempted = true;
+    phase = VoicePhase.sending;
+    _notify();
+    bool accepted;
+    try {
+      accepted = await sendNote!(note);
+    } catch (_) {
+      accepted = false;
+    }
+    if (!_valid(run)) return;
+    if (accepted) {
+      await cancel();
+    } else {
+      phase = VoicePhase.preview;
+      error = 'Delivery could not be confirmed. Check the conversation before recording again. This note will not be resent automatically.';
+      _notify();
+    }
+  }
+
   Future<void> toggleMute() async {
     if (!isCall || phase != VoicePhase.listening || _pumping) return;
     muted = !muted;
     _queue.clear();
     _queuedBytes = 0;
     _remainder.clear();
+    _noteAudio.clear();
+    pendingNote = null;
+    level.value = 0;
     final turn = _turn;
     _turn = null;
     // Muting discards the unfinished utterance and releases Hex's stream.
@@ -457,6 +577,9 @@ final class VoiceViewModel extends ChangeNotifier {
     _queue.clear();
     _queuedBytes = 0;
     _remainder.clear();
+    _noteAudio.clear();
+    pendingNote = null;
+    level.value = 0;
     final turn = _turn;
     _turn = null;
     final capture = _capture;

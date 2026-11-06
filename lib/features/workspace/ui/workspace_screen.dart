@@ -19,6 +19,8 @@ import 'workspace_settings_view.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/ui/chat_flow_screen.dart';
 import '../../chat/domain/voice_recorder.dart';
+import '../../chat/domain/voice_audio_player.dart';
+import '../../chat/domain/voice_note.dart';
 
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({
@@ -27,11 +29,13 @@ class WorkspaceScreen extends StatefulWidget {
     required this.auth,
     this.settings,
     this.voiceRecorderFactory,
+    this.voicePlaybackFactory,
   });
   final ConnectionsRepository repository;
   final AuthRepository auth;
   final SettingsViewModel? settings;
   final VoiceRecorder Function()? voiceRecorderFactory;
+  final VoiceAudioPlayer Function()? voicePlaybackFactory;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -48,6 +52,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   bool _chatOpen = false;
   bool _choosingProject = false;
   bool _deleteOpen = false;
+  final _voiceNotes = VoiceNoteMemory();
 
   Future<void> _openChat(ChatViewModel source, [HomeChat? entry]) async {
     if (_chatOpen ||
@@ -79,6 +84,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
             drafts: drafts,
             settings: _settings,
             voiceRecorderFactory: widget.voiceRecorderFactory,
+            voicePlaybackFactory: widget.voicePlaybackFactory,
+            voiceNotes: _voiceNotes,
           ),
         ),
       );
@@ -92,6 +99,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _connections.addListener(_clearRevokedAudio);
     if (widget.repository case final ChatRepository repository) {
       _chats = ChatsHomeViewModel(
         _connections,
@@ -115,11 +123,26 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
 
   @override
   void dispose() {
+    _connections.removeListener(_clearRevokedAudio);
+    _voiceNotes.clear();
     WidgetsBinding.instance.removeObserver(this);
     _chats?.dispose();
     _connections.dispose();
     if (widget.settings == null) _settings.dispose();
     super.dispose();
+  }
+
+  void _clearRevokedAudio() {
+    if (widget.repository case final ChatRepository repository) {
+      _voiceNotes.retainConnectors(
+        _connections.connections.map((c) => c.id).toSet(),
+      );
+      for (final machine in _connections.connections) {
+        if (machine.needsVerification || !repository.chatTrusted(machine.id)) {
+          _voiceNotes.clear(connector: machine.id);
+        }
+      }
+    }
   }
 
   Future<void> _deleteAccount() async {
