@@ -24,6 +24,13 @@ abstract final class AppTheme {
   static const info = Color(0xFF285F85);
   static const infoSurface = Color(0xFFEAF2FA);
   static const neutralSurface = Color(0xFFF0F1EC);
+  // User-selected connection identity colors retain the same hue in either
+  // theme and always pair with the fixed dark brand ink.
+  static const connectionBlue = Color(0xFFAFD8F5);
+  static const connectionPurple = Color(0xFFD4C2F2);
+  static const connectionTeal = Color(0xFFA4DFCF);
+  static const connectionOrange = Color(0xFFF5CD9D);
+  static const connectionRose = Color(0xFFF0B7CC);
 
   static const darkColors = AppColors(
     ink: Color(0xFFE7ECE1),

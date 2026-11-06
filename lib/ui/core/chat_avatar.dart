@@ -5,11 +5,11 @@ import 'app_theme.dart';
 
 Color connectionAccent(ConnectionColor color) => switch (color) {
   ConnectionColor.lime => AppTheme.lime,
-  ConnectionColor.blue => const Color(0xFFAFD8F5),
-  ConnectionColor.purple => const Color(0xFFD4C2F2),
-  ConnectionColor.teal => const Color(0xFFA4DFCF),
-  ConnectionColor.orange => const Color(0xFFF5CD9D),
-  ConnectionColor.rose => const Color(0xFFF0B7CC),
+  ConnectionColor.blue => AppTheme.connectionBlue,
+  ConnectionColor.purple => AppTheme.connectionPurple,
+  ConnectionColor.teal => AppTheme.connectionTeal,
+  ConnectionColor.orange => AppTheme.connectionOrange,
+  ConnectionColor.rose => AppTheme.connectionRose,
 };
 
 class ChatAvatar extends StatelessWidget {
