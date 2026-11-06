@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openremotecode/app.dart';
 import 'package:openremotecode/features/chat/data/chat_repository.dart';
 import 'package:openremotecode/features/chat/chats_home_view_model.dart';
+import 'package:openremotecode/features/chat/domain/chat_models.dart';
 import 'package:openremotecode/features/chat/ui/chats_home_view.dart';
 import 'package:openremotecode/features/connections/connections_view_model.dart';
 import 'package:openremotecode/features/connections/domain/remote_connection.dart';
@@ -97,8 +98,16 @@ Future<void> _size(WidgetTester tester, Size logical, double ratio) async {
 
 double _ratio = 2;
 
-Future<void> _capture(WidgetTester tester, String name) async {
-  await tester.pumpAndSettle();
+Future<void> _capture(
+  WidgetTester tester,
+  String name, {
+  bool settle = true,
+}) async {
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump(const Duration(milliseconds: 300));
+  }
   final boundary =
       _shot.currentContext!.findRenderObject()! as RenderRepaintBoundary;
   await tester.runAsync(() async {
@@ -456,6 +465,32 @@ void main() {
         ),
       );
       await _capture(tester, 'home-folder-${theme.brightness.name}');
+      final samples = source.chatList.chats.take(3).toList();
+      for (var i = 0; i < samples.length; i++) {
+        final chat = samples[i];
+        source.chatList.applyUpdatedChat(
+          RemoteChat(
+            chat.id,
+            chat.title,
+            chat.updatedAt,
+            activity: i == 0
+                ? const ChatActivity('busy')
+                : i == 1
+                ? const ChatActivity('idle', idleAt: 300, outcome: 'succeeded')
+                : null,
+          ),
+        );
+      }
+      home.draftsFor(source)['new'] = 'Synthetic local draft';
+      home.draftsFor(source)['chat:${samples[0].id}'] = 'Synthetic follow-up';
+      home.draftsFor(source)['chat:${samples[2].id}'] =
+          'Synthetic unsent message';
+      home.selectFolder(source);
+      await _capture(
+        tester,
+        'home-activity-${theme.brightness.name}',
+        settle: false,
+      );
       await tester.pumpWidget(const SizedBox());
       home.dispose();
       connections.dispose();

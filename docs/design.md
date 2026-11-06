@@ -57,8 +57,37 @@ cannot open offline. Cold starts cannot fetch their chats. Summaries and drafts
 remain in account-scoped memory, never ordinary preferences or server storage.
 Drafts survive returning to the list; revocation, identity loss, project removal
 and logout discard affected index/draft state. Results received after suspension,
-revocation or disposal cannot repopulate that state. No new remote capability,
+revocation or disposal cannot repopulate that state. No unrestricted remote access,
 automatic mutation retry, trust grant or sensitive logging is introduced.
+
+### Chat-row activity and drafts
+
+Rows show a small themed spinner beside the title while OpenCode reports busy
+or retry. Offline/last-known working state and reduced-motion mode use a static
+icon instead. A success-colored checkmark means **Finished · Unread**, not merely
+idle: the last outcome must be succeeded and its idle timestamp newer than the
+viewed timestamp. Failed, interrupted, legacy and unknown states never get a
+success checkmark. Indicators have text tooltips and accessible labels.
+
+Read state belongs to OpenCode, shared with its other clients. Only the rendered
+latest response in a foreground, uncovered conversation acknowledges its observed
+completion through `chat.view`. Tapping a row, reading earlier history, a covered
+route or backgrounding cannot acknowledge a newer completion. Uncertain view
+requests are not retried automatically. Older connectors without the metadata or
+view capability degrade without fabricated read receipts.
+
+An independent **Draft** label appears for non-whitespace unsent text; it can
+coexist with either working or unread state. No draft content is previewed. An
+unsent new conversation has a local **New chat · Draft** row within its folder;
+tapping resumes that draft without creating a remote session. Drafts retain the
+existing workspace-memory lifetime and account/connector/folder/session scope.
+
+The home holds one renewable, bounded metadata-only list subscription per online
+connector, across its authorized folders. Updates do not download conversations.
+Sequence gaps, lease loss and reconnect request authoritative lists; stale
+generation events and foreign scopes are discarded. Foreground suspension,
+trust loss and disposal close subscriptions. See the protocol contract in
+`packages/protocol/CHAT-ACTIVITY.md` for the capability and security boundary.
 
 Settings displays app-wide, per-device Chat display switches for thinking
 messages and image previews, both on by default, followed by the authenticated

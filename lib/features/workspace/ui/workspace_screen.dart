@@ -250,6 +250,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
               ChatsHomeView(
                 model: home,
                 onOpen: (entry) => _openChat(entry.source, entry),
+                onOpenDraft: (source) => _openChat(source),
                 onConnect: () => setState(() => _destination = 'connect'),
               )
             else

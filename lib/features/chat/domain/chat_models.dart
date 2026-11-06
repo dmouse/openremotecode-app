@@ -12,10 +12,17 @@ final class RemoteProject {
 }
 
 final class RemoteChat {
-  const RemoteChat(this.id, this.title, this.updatedAt, {this.parentId});
+  const RemoteChat(
+    this.id,
+    this.title,
+    this.updatedAt, {
+    this.parentId,
+    this.activity,
+  });
   final String id, title;
   final DateTime updatedAt;
   final String? parentId;
+  final ChatActivity? activity;
   factory RemoteChat.parse(Map<String, dynamic> value) {
     final time = value['updatedAt'];
     final title = value['title'];
@@ -33,6 +40,51 @@ final class RemoteChat {
       parentId: value['parentId'] == null
           ? null
           : requiredString(value, 'parentId', max: 128),
+      activity: value.containsKey('activity')
+          ? ChatActivity.parse(requiredMap(value, 'activity'))
+          : null,
+    );
+  }
+}
+
+final class ChatActivity {
+  const ChatActivity(this.status, {this.idleAt, this.viewedAt, this.outcome});
+  final String status;
+  final int? idleAt, viewedAt;
+  final String? outcome;
+  bool get working => status == 'busy' || status == 'retry';
+  bool get unread =>
+      status == 'idle' &&
+      outcome == 'succeeded' &&
+      idleAt != null &&
+      (viewedAt == null || viewedAt! < idleAt!);
+  factory ChatActivity.parse(Map<String, dynamic> value) {
+    int? time(String key) {
+      final v = value[key];
+      if (v == null && !value.containsKey(key)) return null;
+      if (v is! int || v < 0 || v > 9007199254740991) {
+        throw const FormatException();
+      }
+      return v;
+    }
+
+    if (!['idle', 'busy', 'retry', 'unknown'].contains(value['status']) ||
+        (value.containsKey('outcome') &&
+            ![
+              'succeeded',
+              'failed',
+              'interrupted',
+            ].contains(value['outcome'])) ||
+        value.keys.any(
+          (key) => !['status', 'idleAt', 'viewedAt', 'outcome'].contains(key),
+        )) {
+      throw const FormatException();
+    }
+    return ChatActivity(
+      value['status'] as String,
+      idleAt: time('idleAt'),
+      viewedAt: time('viewedAt'),
+      outcome: value['outcome'] as String?,
     );
   }
 }

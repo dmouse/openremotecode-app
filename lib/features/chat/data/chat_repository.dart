@@ -270,6 +270,7 @@ final class RelayRequests {
     'chat.delete',
     'chat.rename',
     'chat.fork',
+    'chat.view',
     'chat.permission.reply',
     'chat.question.reply',
   ].contains(operation);

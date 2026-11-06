@@ -146,6 +146,34 @@ class _FoldersRepository extends _Repository {
   }
 }
 
+class _LiveRepository extends _FoldersRepository {
+  final events = StreamController<ChatEvent>.broadcast(sync: true);
+  final generation = Object();
+  final targets = <String, Map<String, dynamic>>{};
+  @override
+  Stream<ChatEvent> get chatEvents => events.stream;
+  @override
+  Object chatConnectionGeneration(String id) => generation;
+  @override
+  bool chatSupports(String id, String operation) =>
+      ['chat.list.subscribe', 'chat.list.updated'].contains(operation);
+  @override
+  Future<Map<String, dynamic>> chatRequest(
+    String id,
+    String operation,
+    Map<String, dynamic> body,
+  ) async {
+    if (operation == 'chat.list.subscribe') {
+      targets[id] = body;
+      return {...body, 'revision': 0};
+    }
+    if (operation == 'chat.list.unsubscribe') {
+      return {'version': 1, 'unsubscribed': true};
+    }
+    return super.chatRequest(id, operation, body);
+  }
+}
+
 Future<void> _settle(ChatsHomeViewModel model) async {
   for (var i = 0; i < 50 && model.loading; i++) {
     await Future<void>.delayed(Duration.zero);
@@ -154,6 +182,60 @@ Future<void> _settle(ChatsHomeViewModel model) async {
 }
 
 void main() {
+  test('live summaries update only their connection and folder without opening messages', () async {
+    final repo = _LiveRepository();
+    final connections = ConnectionsViewModel(repo);
+    final home = ChatsHomeViewModel(connections, repo);
+    await connections.load();
+    await _settle(home);
+    await Future<void>.delayed(Duration.zero);
+    final target = repo.targets['a']!;
+    repo.events.add(
+      ChatEvent(
+        connectorId: 'a',
+        generation: repo.generation,
+        operation: 'chat.list.updated',
+        requestId: target['subscriptionId'] as String,
+        body: {
+          ...target,
+          'revision': 1,
+          'reset': false,
+          'changes': [
+            {
+              'projectId': 'p_api',
+              'chat': {
+                'id': 'same-session',
+                'title': 'a/p_api',
+                'updatedAt': 100,
+                'activity': {'status': 'busy'},
+              },
+            },
+          ],
+        },
+      ),
+    );
+    expect(
+      home.chats
+          .singleWhere((c) => c.connection.id == 'a' && c.project.id == 'p_api')
+          .chat
+          .activity!
+          .working,
+      isTrue,
+    );
+    expect(
+      home.chats
+          .where((c) => c.connection.id == 'b')
+          .every((c) => c.chat.activity == null),
+      isTrue,
+    );
+    expect(repo.calls.where((call) => call.$2 == 'chat.snapshot'), isEmpty);
+    home.setActive(false);
+    home.dispose();
+    connections.dispose();
+    await repo.events.close();
+    await repo.changes.close();
+  });
+
   test('duplicate folder names on one connection use full paths', () async {
     final repo = _FoldersRepository()..duplicateNames = true;
     final connections = ConnectionsViewModel(repo);
@@ -422,9 +504,15 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Laptop'));
     await tester.pumpAndSettle();
     for (var i = 0; i < 2; i++) {
-      await tester.tap(find.byTooltip('New chat'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ListTile, 'App'));
+      if (i == 0) {
+        await tester.tap(find.byTooltip('New chat'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(ListTile, 'App'));
+      } else {
+        await tester.tap(
+          find.byKey(const ValueKey(('new-draft', 'a', '/work/app'))),
+        );
+      }
       await tester.pumpAndSettle();
       final composer = find.byKey(const ValueKey('chat-composer'));
       if (i == 0) {
@@ -437,6 +525,11 @@ void main() {
       }
       await tester.tap(find.byTooltip('Back').first);
       await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey(('new-draft', 'a', '/work/app'))),
+        findsOneWidget,
+      );
+      expect(find.text('Draft'), findsOneWidget);
     }
     expect(repo.calls.any((call) => call.$2 == 'chat.create'), isFalse);
     expect(tester.takeException(), isNull);
@@ -557,6 +650,13 @@ void main() {
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'a conversation',
+      );
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'a conversation'),
+          matching: find.text('Draft'),
+        ),
+        findsOneWidget,
       );
       await tester.tap(find.byTooltip('App options'));
       await tester.pumpAndSettle();

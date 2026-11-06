@@ -274,10 +274,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
 
   @override
   void dispose() {
-    if (!model.trustLost && previousChat != null) {
-      _drafts[previousChat!.startsWith('draft:') ? 'new' : previousChat!] =
-          draft.text;
-    }
+    _saveDraft();
     WidgetsBinding.instance.removeObserver(this);
     model.removeListener(_changed);
     _voice?.dispose();
@@ -289,6 +286,13 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
     _composerFocus.dispose();
     _modelSearch.dispose();
     super.dispose();
+  }
+
+  void _saveDraft() {
+    if (!model.trustLost && previousChat != null) {
+      _drafts[previousChat!.startsWith('draft:') ? 'new' : previousChat!] =
+          draft.text;
+    }
   }
 
   Future<void> _renameChat() async {
@@ -571,6 +575,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
             model.isSubtask ||
             model.page == ChatPage.projects,
         onPopInvokedWithResult: (didPop, _) {
+          if (didPop) _saveDraft();
           if (!didPop) model.back();
         },
         child: Scaffold(

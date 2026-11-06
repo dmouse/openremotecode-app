@@ -43,6 +43,8 @@ const connectorEventOperations = {
   'project.mcp.updated',
   'chat.stream.updated',
   'chat.stream.closed',
+  'chat.list.updated',
+  'chat.list.closed',
   'connector.credential.updated',
 };
 

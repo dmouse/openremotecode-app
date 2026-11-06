@@ -12,12 +12,20 @@ See [Naming and Service Hosts](../README.md#naming-and-service-hosts)
 for the landing page and API/relay hosts.
 
 Native Flutter client with real server authentication, secure session restoration,
-a Chats home with machine filters, and short-code pairing. The top-right menu
+a Chats home with connection/folder filters, and short-code pairing. The top-right menu
 offers Connect (remote-machine management) and Settings. Conversations open
 directly from the combined list; Back restores the list and its search/filter.
 The main color is `#DBF4AD`.
 UI widgets depend on view models and repositories; networking, storage, and
 cryptography stay outside widgets.
+
+Chat rows show a spinner while working, a checkmark for an unread successful
+completion, and an independent **Draft** label for unsent text. New unsent chats
+have a local resumable draft row; draft text is not previewed or persisted to disk.
+Viewed state follows OpenCode across its clients and clears only when the latest
+response is rendered in the foreground. Use an updated connector for live list
+metadata; older connectors remain usable without invented unread indicators.
+See [chat activity semantics](docs/design.md#chat-row-activity-and-drafts).
 
 ## Local Android development
 

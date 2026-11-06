@@ -7,6 +7,7 @@ import '../connections/domain/remote_connection.dart';
 import '../settings/settings_view_model.dart';
 import 'chat_view_model.dart';
 import 'data/chat_repository.dart';
+import 'data/chat_list_stream.dart';
 import 'domain/chat_models.dart';
 import 'projects_view_model.dart';
 
@@ -39,6 +40,9 @@ final class ChatsHomeViewModel extends ChangeNotifier {
   final _drafts = <(String, String), Map<String, String>>{};
   final _errors = <String, String>{};
   final _online = <String>{};
+  final _listStreams = <String, ChatListStream>{};
+  final _liveUpdates = <(String, String, String), RemoteChat>{};
+  Timer? _reconcileTimer;
   StreamSubscription<void>? _subscription;
   bool _disposed = false, _active = true, loading = false;
   int _generation = 0;
@@ -121,6 +125,92 @@ final class ChatsHomeViewModel extends ChangeNotifier {
   Map<String, String> draftsFor(ChatViewModel source) =>
       _drafts.putIfAbsent((source.connectorId, source.project!.path), () => {});
 
+  bool hasDraft(HomeChat entry) =>
+      _drafts[(
+            entry.connection.id,
+            entry.project.path,
+          )]?['chat:${entry.chat.id}']
+          ?.trim()
+          .isNotEmpty ==
+      true;
+  List<ChatViewModel> get draftSources => sources
+      .where(
+        (source) =>
+            _drafts[(source.connectorId, source.project!.path)]?['new']
+                ?.trim()
+                .isNotEmpty ==
+            true,
+      )
+      .toList();
+
+  void _scheduleReconcile() {
+    _reconcileTimer?.cancel();
+    if (!_disposed && _active) {
+      _reconcileTimer = Timer(
+        const Duration(milliseconds: 300),
+        () => unawaited(refresh()),
+      );
+    }
+  }
+
+  void _applyLive(String connectorId, String projectId, RemoteChat chat) {
+    if (_disposed || !_active || !repository.chatTrusted(connectorId)) return;
+    final source = _sources.values
+        .where(
+          (s) => s.connectorId == connectorId && s.project?.id == projectId,
+        )
+        .firstOrNull;
+    if (source == null) return;
+    if (loading && _liveUpdates.length < 200) {
+      _liveUpdates[(connectorId, source.project!.path, chat.id)] = chat;
+    } else if (loading) {
+      _refreshAgain = true;
+    }
+    if (!source.chatList.chats.any((c) => c.id == chat.id)) {
+      _scheduleReconcile();
+      return;
+    }
+    source.chatList.applyUpdatedChat(chat);
+  }
+
+  void _syncListStreams() {
+    final ids = machines
+        .where(
+          (m) =>
+              _active &&
+              !m.needsVerification &&
+              repository.chatOnline(m.id) &&
+              repository.chatTrusted(m.id),
+        )
+        .map((m) => m.id)
+        .toSet();
+    for (final id in _listStreams.keys.toList()) {
+      if (!ids.contains(id)) _listStreams.remove(id)!.dispose();
+    }
+    for (final id in ids) {
+      final projects = _sources.values
+          .where((s) => s.connectorId == id && s.project != null)
+          .map((s) => s.project!.id)
+          .toSet()
+          .toList();
+      if (projects.isEmpty) {
+        _listStreams.remove(id)?.dispose();
+        continue;
+      }
+      _listStreams
+          .putIfAbsent(
+            id,
+            () => ChatListStream(
+              repository,
+              id,
+              (project, chat) => _applyLive(id, project, chat),
+              _scheduleReconcile,
+            ),
+          )
+          .start(projects);
+    }
+  }
+
   void selectMachine(String? id) {
     if (_disposed || (id != null && !machines.any((m) => m.id == id))) return;
     selectedMachine = id;
@@ -182,6 +272,7 @@ final class ChatsHomeViewModel extends ChangeNotifier {
       ..clear()
       ..addAll(online);
     notifyListeners();
+    _syncListStreams();
     if (changed && _active) unawaited(refresh());
   }
 
@@ -189,6 +280,8 @@ final class ChatsHomeViewModel extends ChangeNotifier {
     if (_disposed || _active == active) return;
     _active = active;
     _generation++;
+    if (!active) _reconcileTimer?.cancel();
+    _syncListStreams();
     for (final source in _sources.values) {
       source.setActive(active, reconcile: false);
     }
@@ -266,6 +359,8 @@ final class ChatsHomeViewModel extends ChangeNotifier {
     } finally {
       loading = false;
       if (!_disposed) {
+        _flushLiveUpdates();
+        _syncListStreams();
         _notify();
         if (_refreshAgain && _active) {
           _refreshAgain = false;
@@ -291,10 +386,22 @@ final class ChatsHomeViewModel extends ChangeNotifier {
       }
     } finally {
       loading = false;
+      if (!_disposed) _flushLiveUpdates();
       _notify();
       if (_refreshAgain && !_disposed && _active) {
         _refreshAgain = false;
         unawaited(refresh());
+      }
+    }
+  }
+
+  void _flushLiveUpdates() {
+    final updates = Map.of(_liveUpdates);
+    _liveUpdates.clear();
+    for (final entry in updates.entries) {
+      final source = _sources[(entry.key.$1, entry.key.$2)];
+      if (source?.project != null && repository.chatTrusted(entry.key.$1)) {
+        source!.chatList.applyUpdatedChat(entry.value);
       }
     }
   }
@@ -309,6 +416,12 @@ final class ChatsHomeViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _reconcileTimer?.cancel();
+    for (final stream in _listStreams.values) {
+      stream.dispose();
+    }
+    _listStreams.clear();
+    _liveUpdates.clear();
     _generation++;
     connections.removeListener(_connectionsChanged);
     unawaited(_subscription?.cancel());

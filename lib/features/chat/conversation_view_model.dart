@@ -223,6 +223,88 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   RemoteChat? chat;
   String? get error => errorBox.value;
   String status = 'unknown';
+  final _viewAttempts = <(String, int)>{};
+
+  /// Called only by the rendered, foreground viewport at the latest response.
+  /// Acknowledges the observed idle timestamp, never whichever turn finishes
+  /// while the request is in flight. No automatic retry of uncertain outcomes.
+  Future<void> markLatestViewed({
+    required (String, int)? renderedCompletion,
+  }) async {
+    final current = chat;
+    final activity = current?.activity;
+    final selectedProject = project();
+    if (_disposed ||
+        isSubtask ||
+        _covered ||
+        !active() ||
+        !online() ||
+        trustLost() ||
+        !repository.chatTrusted(connectorId) ||
+        !repository.chatOnline(connectorId) ||
+        !isConversationPage() ||
+        status != 'idle' ||
+        current == null ||
+        selectedProject == null ||
+        activity?.idleAt == null ||
+        !activity!.unread ||
+        !repository.chatSupports(connectorId, 'chat.view') ||
+        messages.isEmpty ||
+        messages.last.role != 'assistant' ||
+        messages.last.incomplete) {
+      return;
+    }
+    final observed = (current.id, activity.idleAt!);
+    if (renderedCompletion != observed || !_viewAttempts.add(observed)) return;
+    while (_viewAttempts.length > 200) {
+      _viewAttempts.remove(_viewAttempts.first);
+    }
+    final lifetime = repository.chatConnectionGeneration(connectorId);
+    try {
+      final response = await repository.chatRequest(connectorId, 'chat.view', {
+        'projectId': selectedProject.id,
+        'sessionId': current.id,
+        'idleAt': activity.idleAt,
+      });
+      if (_disposed ||
+          !active() ||
+          !online() ||
+          trustLost() ||
+          !repository.chatTrusted(connectorId) ||
+          chat?.id != current.id ||
+          project()?.path != selectedProject.path ||
+          !identical(
+            lifetime,
+            repository.chatConnectionGeneration(connectorId),
+          ) ||
+          response['version'] != 1 ||
+          response['accepted'] != true) {
+        return;
+      }
+      final latest = chat!;
+      final state = latest.activity;
+      if (state == null) return;
+      chat = RemoteChat(
+        latest.id,
+        latest.title,
+        latest.updatedAt,
+        parentId: latest.parentId,
+        activity: ChatActivity(
+          state.status,
+          idleAt: state.idleAt,
+          outcome: state.outcome,
+          viewedAt: (state.viewedAt ?? -1) > observed.$2
+              ? state.viewedAt
+              : observed.$2,
+        ),
+      );
+      _syncChatList(chat!);
+      notifyListeners();
+    } catch (_) {
+      // Reconcile with OpenCode next time; never retry blindly.
+    }
+  }
+
   ChatPermission? permission;
   ChatQuestion? question;
 
@@ -458,6 +540,7 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
   /// backToProjects, a chat's own deletion, trust loss) that already governs
   /// its own generation/busy-gate transition.
   void closeChat() {
+    _viewAttempts.clear();
     // Whatever was in flight for this chat (a snapshot read, a rename/fork/
     // send) no longer applies once it's no longer the open chat.
     invalidate();
@@ -602,8 +685,17 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
       throw ChatFailure.invalid;
     }
     if (resetHistory) _clearMessages();
-    chat = summary;
-    _syncChatList(summary);
+    // Earlier-history pages cannot prove a newer completion was displayed.
+    chat = older
+        ? RemoteChat(
+            summary.id,
+            summary.title,
+            summary.updatedAt,
+            parentId: summary.parentId,
+            activity: chat!.activity,
+          )
+        : summary;
+    _syncChatList(chat!);
     status = response['status'] as String;
     permission = parsePermission(response);
     question = parseQuestion(response);
@@ -682,7 +774,8 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
     final current = chatList.chats.where((c) => c.id == summary.id).firstOrNull;
     if (current != null &&
         current.title == summary.title &&
-        current.updatedAt == summary.updatedAt) {
+        current.updatedAt == summary.updatedAt &&
+        identical(current.activity, summary.activity)) {
       return;
     }
     chatList.applyUpdatedChat(summary);

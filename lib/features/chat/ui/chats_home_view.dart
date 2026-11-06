@@ -6,6 +6,8 @@ import '../../../ui/core/inline_notice.dart';
 import '../../../ui/core/search_field.dart';
 import '../../../ui/core/chat_avatar.dart';
 import 'chat_filter_strip.dart';
+import 'chat_row_activity.dart';
+import '../../../ui/core/app_theme.dart';
 import '../chat_view_model.dart';
 import '../chats_home_view_model.dart';
 
@@ -15,10 +17,12 @@ class ChatsHomeView extends StatefulWidget {
     required this.model,
     required this.onOpen,
     required this.onConnect,
+    this.onOpenDraft,
   });
   final ChatsHomeViewModel model;
   final ValueChanged<HomeChat> onOpen;
   final VoidCallback onConnect;
+  final ValueChanged<ChatViewModel>? onOpenDraft;
 
   @override
   State<ChatsHomeView> createState() => _ChatsHomeViewState();
@@ -144,6 +148,15 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
       final chats = model.chats
           .where((entry) => entry.chat.title.toLowerCase().contains(query))
           .toList();
+      final drafts = model.draftSources
+          .where(
+            (source) =>
+                query.isEmpty ||
+                'new chat ${source.project!.name}'.toLowerCase().contains(
+                  query,
+                ),
+          )
+          .toList();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -193,9 +206,48 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     sliver: SliverList.builder(
-                      itemCount: chats.length,
+                      itemCount: drafts.length + chats.length,
                       itemBuilder: (context, index) {
-                        final entry = chats[index];
+                        if (index < drafts.length) {
+                          final source = drafts[index];
+                          final machine = model.machines.firstWhere(
+                            (m) => m.id == source.connectorId,
+                          );
+                          return ListTile(
+                            key: ValueKey((
+                              'new-draft',
+                              source.connectorId,
+                              source.project!.path,
+                            )),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 8,
+                            ),
+                            leading: ChatAvatar(
+                              color: model.connections.colorFor(
+                                source.connectorId,
+                              ),
+                            ),
+                            title: const Text('New chat'),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Draft',
+                                  style: TextStyle(
+                                    color: AppTheme.of(context).warning,
+                                  ),
+                                ),
+                                Text(
+                                  '${machine.name} · ${source.project!.name}',
+                                ),
+                              ],
+                            ),
+                            onTap: source.online && widget.onOpenDraft != null
+                                ? () => widget.onOpenDraft!(source)
+                                : null,
+                          );
+                        }
+                        final entry = chats[index - drafts.length];
                         return ListTile(
                           key: ValueKey((
                             entry.connection.id,
@@ -210,13 +262,35 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
                               entry.connection.id,
                             ),
                           ),
-                          title: Text(
-                            entry.chat.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  entry.chat.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              ChatRowActivity(
+                                activity: entry.chat.activity,
+                                online: entry.source.online,
+                              ),
+                            ],
                           ),
-                          subtitle: Text(
-                            '${entry.connection.name} · ${entry.project.name}${entry.source.online ? '' : ' · Last known'}',
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (model.hasDraft(entry))
+                                Text(
+                                  'Draft',
+                                  style: TextStyle(
+                                    color: AppTheme.of(context).warning,
+                                  ),
+                                ),
+                              Text(
+                                '${entry.connection.name} · ${entry.project.name}${entry.source.online ? '' : ' · Last known'}',
+                              ),
+                            ],
                           ),
                           trailing: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -245,7 +319,7 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
                       },
                     ),
                   ),
-                  if (chats.isEmpty && !model.loading)
+                  if (chats.isEmpty && drafts.isEmpty && !model.loading)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.all(32),

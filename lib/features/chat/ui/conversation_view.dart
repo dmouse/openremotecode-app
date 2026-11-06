@@ -35,6 +35,7 @@ class ConversationViewState extends State<ConversationView> {
   final _expandedTools = <(String, String)>{};
   late int _detailRevision;
   ChatMessage? _renderedLatest;
+  (String, int)? _renderedCompletion;
   bool _renderedTyping = false;
   final _messageAnchors = <String, GlobalKey>{};
   (String, double)? _readingAnchor;
@@ -121,6 +122,14 @@ class ConversationViewState extends State<ConversationView> {
       }
       _refinePendingScroll();
       _updateNavigationState();
+      if (_scroll.position.pixels <= 24 &&
+          _pendingScrollTarget == null &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        unawaited(
+          model.markLatestViewed(renderedCompletion: _renderedCompletion),
+        );
+      }
       // The list grows from the bottom: extentAfter is the distance to older
       // history. Prepending messages leaves existing rows at the same offset.
       // Suppressed while a scrollToMessage jump is in flight: its target is
@@ -458,6 +467,8 @@ class ConversationViewState extends State<ConversationView> {
   );
 
   Widget _buildConversation(BuildContext context) {
+    final idleAt = model.chat?.activity?.idleAt;
+    _renderedCompletion = idleAt == null ? null : (model.chat!.id, idleAt);
     final latest = model.messages.lastOrNull;
     final showTyping = model.isSending || model.isWorking;
     final credentialNotice = model.pendingCredentialNotice;
