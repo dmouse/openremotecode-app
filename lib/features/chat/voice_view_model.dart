@@ -45,10 +45,12 @@ final class VoiceViewModel extends ChangeNotifier {
   final Future<void> Function()? beforeRecording;
   final bool Function()? canSubmitNote;
   final level = ValueNotifier<double>(0);
+  final waveform = ValueNotifier<List<double>>(const []);
   final recordedDuration = ValueNotifier<int>(0);
-  final _noteAudio = BytesBuilder(copy: true);
+  int _noteBytes = 0;
   VoiceNote? pendingNote;
-  int get recordedMilliseconds => _noteAudio.length ~/ 32;
+  int get recordedMilliseconds => _noteBytes ~/ 32;
+  bool _sendAfterFinish = false;
   bool _noteAttempted = false;
   bool get noteDeliveryUnconfirmed =>
       _noteAttempted && phase == VoicePhase.preview;
@@ -117,9 +119,9 @@ final class VoiceViewModel extends ChangeNotifier {
           ? 'Microphone muted'
           : isCall
           ? 'Listening · speech sends after a pause'
-          : 'Recording voice note · tap Stop to preview',
+          : 'Recording voice message',
     VoicePhase.transcribing => 'Transcribing…',
-    VoicePhase.preview => 'Voice note preview · not sent',
+    VoicePhase.preview => 'Voice message · Not sent',
     VoicePhase.sending => 'Sending voice message…',
     VoicePhase.stopping => 'Ending recording…',
   };
@@ -208,8 +210,11 @@ final class VoiceViewModel extends ChangeNotifier {
     muted = _finishingNote = _stoppingNote = false;
     pendingNote = null;
     _noteAttempted = false;
-    _noteAudio.clear();
+    _noteBytes = 0;
+    _sendAfterFinish = false;
+    _lastLevel = DateTime.fromMillisecondsSinceEpoch(0);
     level.value = 0;
+    waveform.value = const [];
     recordedDuration.value = 0;
     phase = VoicePhase.starting;
     _notify();
@@ -312,11 +317,16 @@ final class VoiceViewModel extends ChangeNotifier {
     _lastAudio = DateTime.now();
     if (muted) return;
     if (mode == VoiceMode.note) {
-      if (bytes.length.isOdd || _noteAudio.length + bytes.length > 1920000) {
+      if (bytes.length.isOdd) {
+        unawaited(_fail('Recording could not finish. Try again.'));
+        return;
+      }
+      if (_noteBytes + bytes.length > 1920000) {
         unawaited(finishNote());
         return;
       }
-      _noteAudio.add(bytes);
+      _noteBytes += bytes.length;
+      recordedDuration.value = recordedMilliseconds;
     }
     if (bytes.length > 160000 ||
         _queuedBytes + _remainder.length + bytes.length > 160000) {
@@ -336,7 +346,10 @@ final class VoiceViewModel extends ChangeNotifier {
         energy += sample * sample;
       }
       level.value = (sqrt(energy / max(1, bytes.length ~/ 2)) * 8).clamp(0, 1);
-      recordedDuration.value = recordedMilliseconds;
+      waveform.value = List.unmodifiable([
+        ...waveform.value.skip(max(0, waveform.value.length - 23)),
+        level.value,
+      ]);
       _lastLevel = DateTime.now();
     }
     _remainder.add(bytes);
@@ -447,23 +460,28 @@ final class VoiceViewModel extends ChangeNotifier {
     _turn = null;
     lastTranscript = text.isEmpty ? null : text;
     if (mode == VoiceMode.note && !autoSend) {
-      final audio = _noteAudio.takeBytes();
-      if (text.isEmpty || audio.isEmpty) {
+      if (text.isEmpty || _noteBytes == 0) {
         await _fail('No speech was recognized. Record another voice note.');
         return;
       }
       final id = requestId();
-      if (VoiceNote.formatPrompt(id, text).length > 32000) {
+      if (VoiceNote.formatPrompt(id, text, recordedMilliseconds).length >
+          32000) {
         await _fail('The transcript is too long. Record a shorter voice note.');
         return;
       }
-      pendingNote = VoiceNote(id: id, audio: audio, transcript: text);
+      pendingNote = VoiceNote(
+        id: id,
+        duration: Duration(milliseconds: recordedMilliseconds),
+        transcript: text,
+      );
       _watchdog?.cancel();
       _watchdog = null;
       level.value = 0;
       phase = VoicePhase.preview;
       _finishingNote = false;
       _notify();
+      if (_sendAfterFinish) await submitNote();
       return;
     }
     if (text.isNotEmpty) {
@@ -492,8 +510,9 @@ final class VoiceViewModel extends ChangeNotifier {
     _notify();
   }
 
-  Future<void> finishNote() async {
+  Future<void> finishNote({bool send = false}) async {
     if (!isNote || phase != VoicePhase.listening || _stoppingNote) return;
+    _sendAfterFinish = send;
     _stoppingNote = true;
     phase = VoicePhase.transcribing;
     _notify();
@@ -546,7 +565,7 @@ final class VoiceViewModel extends ChangeNotifier {
     _queue.clear();
     _queuedBytes = 0;
     _remainder.clear();
-    _noteAudio.clear();
+    _noteBytes = 0;
     pendingNote = null;
     level.value = 0;
     final turn = _turn;
@@ -577,9 +596,11 @@ final class VoiceViewModel extends ChangeNotifier {
     _queue.clear();
     _queuedBytes = 0;
     _remainder.clear();
-    _noteAudio.clear();
+    _noteBytes = 0;
     pendingNote = null;
     level.value = 0;
+    waveform.value = const [];
+    recordedDuration.value = 0;
     final turn = _turn;
     _turn = null;
     final capture = _capture;
@@ -617,7 +638,14 @@ final class VoiceViewModel extends ChangeNotifier {
     _availabilityRevision++;
     _availabilityTimer?.cancel();
     unawaited(
-      cancel().then((_) => recorder.dispose()).catchError((Object _) {}),
+      cancel()
+          .then((_) => recorder.dispose())
+          .whenComplete(() {
+            level.dispose();
+            waveform.dispose();
+            recordedDuration.dispose();
+          })
+          .catchError((Object _) {}),
     );
     super.dispose();
   }

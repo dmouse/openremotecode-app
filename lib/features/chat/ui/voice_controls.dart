@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../../ui/core/app_theme.dart';
 import '../voice_view_model.dart';
-import '../voice_playback_view_model.dart';
 import 'voice_note_bubble.dart';
 
 class VoiceNoteButton extends StatelessWidget {
@@ -34,7 +33,10 @@ class VoiceNoteButton extends StatelessWidget {
     ),
     icon: ValueListenableBuilder<double>(
       valueListenable: voice.level,
-      builder: (context, level, _) => Transform.scale(
+      builder: (context, level, _) => AnimatedScale(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 100),
         scale: voice.isNote && !MediaQuery.disableAnimationsOf(context)
             ? 1 + level * .3
             : 1,
@@ -76,9 +78,8 @@ class VoiceCallButton extends StatelessWidget {
 }
 
 class VoiceStatusBar extends StatelessWidget {
-  const VoiceStatusBar({super.key, required this.voice, this.playback});
+  const VoiceStatusBar({super.key, required this.voice});
   final VoiceViewModel voice;
-  final VoicePlaybackViewModel? playback;
   @override
   Widget build(BuildContext context) {
     if (!voice.active && voice.error == null) return const SizedBox.shrink();
@@ -93,13 +94,11 @@ class VoiceStatusBar extends StatelessWidget {
             children: [
               VoiceNoteBubble(
                 note: note,
-                transcript: note.transcript,
-                playback: playback,
                 preview: true,
                 statusLabel: voice.noteDeliveryUnconfirmed
-                    ? 'Voice note · Delivery unconfirmed'
+                    ? 'Voice message · Delivery unconfirmed'
                     : voice.phase == VoicePhase.sending
-                    ? 'Voice note · Sending…'
+                    ? 'Voice message · Sending…'
                     : null,
               ),
               if (voice.error != null)
@@ -114,7 +113,6 @@ class VoiceStatusBar extends StatelessWidget {
                     onPressed: voice.phase == VoicePhase.sending
                         ? null
                         : () async {
-                            await playback?.stop();
                             await voice.cancel();
                           },
                     child: const Text('Discard'),
@@ -124,7 +122,7 @@ class VoiceStatusBar extends StatelessWidget {
                     child: Text(
                       voice.phase == VoicePhase.sending
                           ? 'Sending…'
-                          : 'Send voice note',
+                          : 'Send voice message',
                     ),
                   ),
                 ],
@@ -133,6 +131,9 @@ class VoiceStatusBar extends StatelessWidget {
           ),
         ),
       );
+    }
+    if (voice.isNote && voice.phase == VoicePhase.listening) {
+      return _RecordingBar(voice: voice);
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
@@ -160,8 +161,6 @@ class VoiceStatusBar extends StatelessWidget {
               ),
             ),
           ),
-          if (voice.isNote && voice.phase == VoicePhase.listening)
-            TextButton(onPressed: voice.finishNote, child: const Text('Stop')),
           if (voice.isCall)
             IconButton(
               tooltip: voice.muted ? 'Unmute microphone' : 'Mute microphone',
@@ -183,4 +182,135 @@ class VoiceStatusBar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _RecordingBar extends StatelessWidget {
+  const _RecordingBar({required this.voice});
+  final VoiceViewModel voice;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.of(context).codeSurface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: voice.level,
+                    builder: (context, level, _) => AnimatedContainer(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 100),
+                      padding: EdgeInsets.all(
+                        8 +
+                            (MediaQuery.disableAnimationsOf(context)
+                                ? 0
+                                : level * 4),
+                      ),
+                      decoration: const BoxDecoration(
+                        color: AppTheme.lime,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.mic, color: AppTheme.ink),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Semantics(
+                  label: 'Microphone on. Recording voice message',
+                  liveRegion: true,
+                  child: const ExcludeSemantics(
+                    child: Text(
+                      'Recording voice message',
+                      key: ValueKey('voice-status'),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ValueListenableBuilder<int>(
+            valueListenable: voice.recordedDuration,
+            builder: (context, milliseconds, _) {
+              final seconds = milliseconds ~/ 1000;
+              return Text(
+                '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')} / 1:00',
+                key: const ValueKey('voice-duration'),
+                semanticsLabel: 'Recorded $seconds seconds. Maximum 60 seconds',
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          ExcludeSemantics(
+            child: SizedBox(
+              height: 32,
+              child: ValueListenableBuilder<List<double>>(
+                valueListenable: voice.waveform,
+                builder: (context, levels, _) => Row(
+                  key: const ValueKey('voice-live-waveform'),
+                  children: [
+                    for (var i = 0; i < 24; i++)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 1),
+                          child: Center(
+                            child: AnimatedContainer(
+                              duration: MediaQuery.disableAnimationsOf(context)
+                                  ? Duration.zero
+                                  : const Duration(milliseconds: 100),
+                              height: MediaQuery.disableAnimationsOf(context)
+                                  ? 4
+                                  : 4 +
+                                        (i < 24 - levels.length
+                                                ? 0
+                                                : levels[i -
+                                                      (24 - levels.length)]) *
+                                            28,
+                              decoration: BoxDecoration(
+                                color: AppTheme.of(context).ink,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            children: [
+              TextButton(onPressed: voice.cancel, child: const Text('Cancel')),
+              TextButton(
+                onPressed: voice.finishNote,
+                child: const Text('Stop'),
+              ),
+              FilledButton.icon(
+                onPressed: () => voice.finishNote(send: true),
+                icon: const Icon(Icons.send),
+                label: const Text('Send'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
 }

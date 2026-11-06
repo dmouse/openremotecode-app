@@ -748,14 +748,13 @@ class ConversationViewState extends State<ConversationView> {
                   key: _messageAnchors.putIfAbsent(message.id, GlobalKey.new),
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (message.role == 'user' &&
-                        VoiceNote.parse(message.text) != null)
+                    if ((message.role == 'user'
+                            ? VoiceNote.parse(message.text)
+                            : null)
+                        case final note?)
                       VoiceNoteBubble(
-                        transcript: VoiceNote.parse(message.text)!.transcript,
-                        note: model.voiceNoteForId?.call(
-                          VoiceNote.parse(message.text)!.id,
-                        ),
-                        playback: model.voicePlayback,
+                        key: ValueKey('voice-${message.id}'),
+                        note: note,
                       )
                     else if (mergedRuns[message.id] case final run?)
                       ToolRunView(

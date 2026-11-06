@@ -480,16 +480,16 @@ void main() {
       await tester.tap(note);
       await settleVoice(tester);
       expect(find.text('Typed draft'), findsOneWidget);
-      expect(find.text('Voice note · Not sent'), findsOneWidget);
+      expect(find.text('Voice message · Not sent'), findsOneWidget);
       expect(repo.prompts, isEmpty);
-      await tester.tap(find.text('Transcribe'));
+      await tester.tap(find.text('Show transcript'));
       await tester.pump();
       expect(find.text(repo.transcript), findsOneWidget);
       expect(repo.prompts, isEmpty);
-      await tester.tap(find.text('Send voice note'));
+      await tester.tap(find.text('Send voice message'));
       await settleVoice(tester);
       expect(VoiceNote.parse(repo.prompts.single)!.transcript, repo.transcript);
-      expect(find.text('Voice note'), findsOneWidget);
+      expect(find.text('Voice message'), findsOneWidget);
       expect(find.text(repo.transcript), findsNothing);
       await tester.tap(call);
       await settleVoice(tester);
@@ -541,7 +541,7 @@ void main() {
     await expectLater(turn.append(Uint8List(1)), throwsA(ChatFailure.invalid));
   });
 
-  test('quick note previews audio without filling the draft or automatically sending', () async {
+  test('quick note previews voice-origin text without filling the draft or automatically sending', () async {
     final h = Harness();
     await h.model.refreshAvailability();
     await h.model.start(VoiceMode.note);
@@ -555,7 +555,7 @@ void main() {
     expect(h.sent, isEmpty);
     expect(h.drafts, isEmpty);
     expect(h.model.phase, VoicePhase.preview);
-    expect(h.model.pendingNote!.audio.length, 16000);
+    expect(h.model.pendingNote!.duration, const Duration(milliseconds: 500));
     await h.model.submitNote();
     expect(h.sent.length, 1);
     expect(VoiceNote.parse(h.sent.single)!.transcript, h.repo.transcript);

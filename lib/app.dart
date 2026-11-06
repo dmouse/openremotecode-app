@@ -17,7 +17,6 @@ import 'platform/google_identity.dart';
 import 'platform/remote_api.dart';
 import 'platform/secure_store.dart';
 import 'platform/voice_recorder.dart';
-import 'platform/voice_audio_player.dart';
 import 'features/server_settings/data/server_settings_repository.dart';
 import 'features/server_settings/server_settings_view_model.dart';
 import 'ui/core/app_theme.dart';
@@ -146,7 +145,6 @@ class _MainAppState extends State<MainApp> {
                     auth: _auth,
                     settings: _settings,
                     voiceRecorderFactory: NativeVoiceRecorder.new,
-                    voicePlaybackFactory: NativeVoiceAudioPlayer.new,
                   );
                 }
                 // An outstanding challenge takes precedence over both auth screens:

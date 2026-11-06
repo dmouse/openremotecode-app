@@ -2,108 +2,94 @@ import 'package:flutter/material.dart';
 
 import '../../../ui/core/app_theme.dart';
 import '../domain/voice_note.dart';
-import '../voice_playback_view_model.dart';
 
+/// Voice-origin text, not a playable recording. The transcript is already sent.
 class VoiceNoteBubble extends StatefulWidget {
   const VoiceNoteBubble({
     super.key,
-    required this.transcript,
-    this.note,
-    this.playback,
+    required this.note,
     this.preview = false,
     this.statusLabel,
   });
+  final VoiceNote note;
   final String? statusLabel;
-  final String transcript;
-  final VoiceNote? note;
-  final VoicePlaybackViewModel? playback;
   final bool preview;
+
   @override
   State<VoiceNoteBubble> createState() => _VoiceNoteBubbleState();
 }
 
 class _VoiceNoteBubbleState extends State<VoiceNoteBubble> {
   bool _transcriptVisible = false;
+
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.playback ?? const AlwaysStoppedAnimation(0),
-    builder: (context, _) {
-      final note = widget.note?.transcript == widget.transcript
-          ? widget.note
-          : null;
-      final player = widget.playback;
-      final playing =
-          note != null && player?.id == note.id && player?.playing == true;
-      final duration = note?.duration;
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.of(context).codeSurface,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  tooltip: playing ? 'Pause voice note' : 'Play voice note',
-                  onPressed:
-                      note == null ||
-                          player == null ||
-                          player.busy ||
-                          !player.canPlay
-                      ? null
-                      : () => player.toggle(note),
-                  icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+  void didUpdateWidget(VoiceNoteBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.note.id != widget.note.id ||
+        oldWidget.note.transcript != widget.note.transcript) {
+      _transcriptVisible = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = widget.note.duration;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.of(context).codeSurface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Icon(Icons.mic_none, semanticLabel: 'Sent using voice'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.statusLabel ??
+                          (widget.preview
+                              ? 'Voice message · Not sent'
+                              : 'Voice message'),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    if (duration != null)
                       Text(
-                        widget.statusLabel ??
-                            (widget.preview
-                                ? 'Voice note · Not sent'
-                                : 'Voice note'),
+                        '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}',
+                        semanticsLabel:
+                            'Recording duration ${duration.inSeconds} seconds',
                       ),
-                      if (duration != null)
-                        Text(
-                          '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}',
-                        ),
-                      if (note == null)
-                        const Text('Audio unavailable on this device'),
-                      if (note != null && player?.id == note.id)
-                        LinearProgressIndicator(
-                          value:
-                              (player!.position /
-                                      duration!.inMilliseconds.clamp(1, 60000))
-                                  .clamp(0, 1),
-                          semanticsLabel: 'Voice playback progress',
-                        ),
-                    ],
-                  ),
+                    Text(
+                      widget.preview
+                          ? 'Audio not saved'
+                          : 'Sent as text · Audio not saved',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            if (player?.error != null)
-              Text(
-                player!.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
-            TextButton(
-              onPressed: () =>
-                  setState(() => _transcriptVisible = !_transcriptVisible),
-              child: Text(
-                _transcriptVisible ? 'Hide transcript' : 'Transcribe',
-              ),
+            ],
+          ),
+          TextButton(
+            onPressed: () =>
+                setState(() => _transcriptVisible = !_transcriptVisible),
+            child: Text(
+              _transcriptVisible ? 'Hide transcript' : 'Show transcript',
             ),
-            if (_transcriptVisible) SelectableText(widget.transcript),
-          ],
-        ),
-      );
-    },
-  );
+          ),
+          if (_transcriptVisible) SelectableText(widget.note.transcript),
+        ],
+      ),
+    );
+  }
 }

@@ -27,12 +27,15 @@ import 'package:openremotecode/features/server_settings/domain/server_endpoint.d
 import 'package:openremotecode/ui/core/app_theme.dart';
 import 'package:openremotecode/features/chat/domain/voice_note.dart';
 import 'package:openremotecode/features/chat/ui/voice_note_bubble.dart';
+import 'package:openremotecode/features/chat/ui/voice_controls.dart';
+import 'package:openremotecode/features/chat/voice_view_model.dart';
 import 'package:openremotecode/ui/core/chat_avatar.dart';
 import 'package:openremotecode/features/connections/domain/connection_color.dart';
 
 import '../test/support/auth_fakes.dart';
 import '../test/support/connections_fakes.dart';
 import '../test/support/memory_server_settings_repository.dart';
+import '../test/voice_test.dart' as voice;
 
 final _shot = GlobalKey();
 
@@ -502,7 +505,7 @@ void main() {
     await _size(tester, const Size(390, 844), 2);
     final note = VoiceNote(
       id: '11111111-1111-4111-8111-111111111111',
-      audio: Uint8List(96000),
+      duration: const Duration(seconds: 3),
       transcript:
           'Review the current changes and explain what needs attention.',
     );
@@ -530,18 +533,14 @@ void main() {
                     'I can review those changes. What would you like me to focus on?',
                   ),
                   const SizedBox(height: 24),
-                  VoiceNoteBubble(
-                    key: ValueKey(theme.brightness),
-                    note: note,
-                    transcript: note.transcript,
-                  ),
+                  VoiceNoteBubble(key: ValueKey(theme.brightness), note: note),
                   const SizedBox(height: 24),
                   const Text(
                     'I’ll review the changes and highlight anything that needs attention.',
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    'Playback is temporary on the recording device. The transcript remains in the conversation.',
+                    'Voice messages are sent as text. Recordings are not saved.',
                   ),
                 ],
               ),
@@ -550,8 +549,91 @@ void main() {
         ),
       );
       await _capture(tester, 'voice-note-${theme.brightness.name}');
-      await tester.tap(find.text('Transcribe'));
+      await tester.tap(find.text('Show transcript'));
       await _capture(tester, 'voice-note-${theme.brightness.name}-transcript');
+    }
+  });
+
+  testWidgets('voice recording presentation in light and dark', (tester) async {
+    await _size(tester, const Size(390, 844), 2);
+    for (final theme in [AppTheme.light, AppTheme.dark]) {
+      final h = voice.Harness();
+      await tester.runAsync(() async {
+        await h.model.refreshAvailability();
+        await h.model.start(VoiceMode.note);
+      });
+      // Synthetic amplitude metadata only; no real microphone or recording.
+      h.model.level.value = .65;
+      h.model.waveform.value = const [
+        .1,
+        .3,
+        .7,
+        .9,
+        .6,
+        .2,
+        .1,
+        .1,
+        .2,
+        .5,
+        .8,
+        1,
+        .7,
+        .4,
+        .2,
+        .1,
+        .4,
+        .7,
+        .9,
+        .6,
+        .3,
+        .2,
+        .5,
+        .65,
+      ];
+      h.model.recordedDuration.value = 18000;
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _shot,
+          child: MaterialApp(
+            theme: theme,
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              appBar: AppBar(
+                leading: const BackButton(),
+                title: const Text('Review changes'),
+              ),
+              body: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text('What would you like me to focus on?'),
+                    ),
+                  ),
+                  VoiceStatusBar(voice: h.model),
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Your typed draft stays separate',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await _capture(
+        tester,
+        'voice-recording-${theme.brightness.name}',
+        settle: false,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(h.close);
     }
   });
 

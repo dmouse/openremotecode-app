@@ -10,9 +10,6 @@ import '../data/chat_repository.dart';
 import '../data/voice_transport.dart';
 import '../domain/voice_recorder.dart';
 import '../voice_view_model.dart';
-import '../domain/voice_note.dart';
-import '../domain/voice_audio_player.dart';
-import '../voice_playback_view_model.dart';
 import '../domain/chat_models.dart';
 import 'chat_composer_bar.dart';
 import 'chat_details_screen.dart';
@@ -40,8 +37,6 @@ class ChatFlowScreen extends StatefulWidget {
     this.directConversation = false,
     this.drafts,
     this.connectionColor = ConnectionColor.lime,
-    this.voicePlaybackFactory,
-    this.voiceNotes,
   }) : parentSessionId = null,
        subtaskDepth = 0;
   const ChatFlowScreen._subtask({
@@ -55,8 +50,6 @@ class ChatFlowScreen extends StatefulWidget {
     required this.settings,
     required this.connectionColor,
   }) : voiceRecorderFactory = null,
-       voicePlaybackFactory = null,
-       voiceNotes = null,
        directConversation = false,
        drafts = null;
   final ChatRepository repository;
@@ -70,8 +63,6 @@ class ChatFlowScreen extends StatefulWidget {
   final bool directConversation;
   final Map<String, String>? drafts;
   final ConnectionColor connectionColor;
-  final VoiceAudioPlayer Function()? voicePlaybackFactory;
-  final VoiceNoteMemory? voiceNotes;
   @override
   State<ChatFlowScreen> createState() => _ChatFlowScreenState();
 }
@@ -89,8 +80,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   final _composerFocus = FocusNode();
   final _modelSearch = TextEditingController();
   VoiceViewModel? _voice;
-  VoicePlaybackViewModel? _playback;
-  late final _voiceNotes = widget.voiceNotes ?? VoiceNoteMemory();
   bool _foreground = true;
   ChatPage? previousPage;
   String? previousChat;
@@ -105,24 +94,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (widget.voicePlaybackFactory case final factory?) {
-      _playback = VoicePlaybackViewModel(
-        factory(),
-        allowPlayback: () =>
-            _foreground &&
-            !_detailsOpen &&
-            !_subtaskOpen &&
-            !model.trustLost &&
-            (!(_voice?.active ?? false) || _voice?.phase == VoicePhase.preview),
-      );
-      model.conversation.voicePlayback = _playback;
-    }
-    model.conversation.voiceNoteForId = (id) {
-      final project = model.project;
-      final chat = model.conversation.chat;
-      if (project == null || chat == null || model.trustLost) return null;
-      return _voiceNotes.find(widget.connectorId, project.path, chat.id, id);
-    };
     final factory = widget.voiceRecorderFactory;
     if (factory != null && !model.isSubtask) {
       _voice = VoiceViewModel(
@@ -147,10 +118,8 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
         canSubmitNote: () => model.conversation.canSend,
         beforeRecording: () async {
           FocusManager.instance.primaryFocus?.unfocus();
-          await _playback?.stop();
         },
         sendNote: (note) async {
-          await _playback?.stop();
           final project = model.project;
           if (project == null ||
               !await model.conversation.prepareVoiceCall() ||
@@ -162,7 +131,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
           }
           final chat = model.conversation.chat;
           if (chat == null) return false;
-          _voiceNotes.add(widget.connectorId, project.path, chat.id, note);
           return model.conversation.send(note.prompt);
         },
         appendDraft: (text) {
@@ -192,9 +160,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   }
 
   void _changed() {
-    if (previousChat != model.conversation.composerKey || model.trustLost) {
-      unawaited(_playback?.stop());
-    }
     if (widget.directConversation && model.page != ChatPage.conversation) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && ModalRoute.of(context)?.isCurrent == true) {
@@ -215,7 +180,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       _drafts.remove('chat:${model.chatList.lastDeletedChatId}');
     }
     if (model.trustLost) {
-      _voiceNotes.clear(connector: widget.connectorId);
       _drafts.clear();
       draft.clear();
       previousChat = null;
@@ -255,7 +219,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
         (state != AppLifecycleState.inactive ||
             _voice?.phase != VoicePhase.starting)) {
       unawaited(_voice?.cancel());
-      unawaited(_playback?.stop());
     }
     _foreground =
         state == AppLifecycleState.resumed ||
@@ -278,8 +241,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
     WidgetsBinding.instance.removeObserver(this);
     model.removeListener(_changed);
     _voice?.dispose();
-    _playback?.dispose();
-    if (widget.voiceNotes == null) _voiceNotes.clear();
     model.dispose();
     search.dispose();
     draft.dispose();
@@ -490,7 +451,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       return;
     }
     _detailsOpen = true;
-    await _playback?.stop();
     _syncVoice();
     await _voice?.cancel();
     if (!mounted) return;
@@ -524,7 +484,6 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       return;
     }
     _subtaskOpen = true;
-    await _playback?.stop();
     _syncVoice();
     await _voice?.cancel();
     if (!mounted) return;
@@ -645,8 +604,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
                   },
                 ),
                 if (model.page == ChatPage.conversation && !model.isSubtask)
-                  if (_voice case final voice?)
-                    VoiceStatusBar(voice: voice, playback: _playback),
+                  if (_voice case final voice?) VoiceStatusBar(voice: voice),
                 if (model.page == ChatPage.conversation && !model.isSubtask)
                   ChatComposerBar(
                     model: model.conversation,
