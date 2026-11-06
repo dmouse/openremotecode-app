@@ -109,6 +109,17 @@ confirm authorizes trust. A mismatch, expiry, or failed verification must never
 create a trusted card. Network failures are recoverable without automatic retries
 of trust-changing requests. No camera/QR flow is needed in this iteration.
 
+## Voice-origin messages
+
+Voice notes show a live microphone, amplitude waveform, elapsed time and
+Cancel/Stop/Send controls while recording. Send submits the final transcript to
+the agent without changing the typed draft. Stop offers an unsent voice card.
+Sent messages use a microphone card with duration and **Show transcript** beneath
+it. They explicitly say **Sent as text · Audio not saved**: there is no playback
+control or retained recording. The label and duration survive reopening through
+the marker in authoritative OpenCode history. See
+[ADR 0007](adr/0007-voice-origin-messages.md) for retention and failure behavior.
+
 ## Visual language
 
 | Token | Value | Use |

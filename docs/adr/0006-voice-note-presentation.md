@@ -1,6 +1,6 @@
 # 0006: Temporary playable voice notes with authoritative text prompts
 
-Status: implemented, 2026-11-06.
+Status: superseded by [0007](0007-voice-origin-messages.md), 2026-11-06.
 
 ## Decision
 
