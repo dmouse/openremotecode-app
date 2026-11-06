@@ -27,8 +27,9 @@ class ConnectionCard extends StatelessWidget {
 
   bool get _isOffline => connection.status == ConnectionStatus.offline;
 
-  Color get _selectionColor =>
-      _isOffline ? AppTheme.muted : AppTheme.selectedBorder;
+  Color _selectionColor(BuildContext context) => _isOffline
+      ? AppTheme.of(context).muted
+      : AppTheme.of(context).selectedBorder;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -43,10 +44,10 @@ class ConnectionCard extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border.all(
               color: _isOffline
-                  ? AppTheme.muted
+                  ? AppTheme.of(context).muted
                   : isSelected
-                  ? _selectionColor
-                  : AppTheme.border,
+                  ? _selectionColor(context)
+                  : AppTheme.of(context).border,
               width: isSelected ? 2 : 1,
             ),
             borderRadius: BorderRadius.circular(20),
@@ -68,7 +69,7 @@ class ConnectionCard extends StatelessWidget {
                       Text(
                         'Selected',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: _selectionColor,
+                          color: _selectionColor(context),
                           fontWeight: FontWeight.w600,
                         ),
                       ),

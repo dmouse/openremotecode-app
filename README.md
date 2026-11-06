@@ -45,6 +45,13 @@ iOS simulator loopback reaches the Mac hosting the simulator; physical iPhones
 need a reachable HTTPS development service. iOS builds and Keychain behavior
 must be verified on macOS/Xcode before shipping.
 
+## Appearance
+
+The app follows the device's light/dark setting by default. Choose **System**,
+**Light**, or **Dark** under **Settings → Appearance** to change it. The choice is
+saved on this device without retaining conversation content. It applies to login,
+chat lists, conversations, Markdown, forms, and connection/status controls.
+
 ## Server selection
 
 Tap login background or branding **six times**, with consecutive taps no more

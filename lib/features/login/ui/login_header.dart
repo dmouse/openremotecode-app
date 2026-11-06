@@ -9,19 +9,23 @@ class LoginHeader extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Wrap(
+      Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         spacing: 8,
         runSpacing: 4,
         children: [
-          Icon(Icons.terminal_rounded, size: 26, color: AppTheme.ink),
+          Icon(
+            Icons.terminal_rounded,
+            size: 26,
+            color: AppTheme.of(context).ink,
+          ),
           Text(
             'Remote',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.8,
-              color: AppTheme.ink,
+              color: AppTheme.of(context).ink,
             ),
           ),
         ],

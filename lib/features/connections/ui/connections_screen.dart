@@ -56,7 +56,7 @@ class ConnectionsScreen extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: viewModel,
     builder: (context, _) => RefreshIndicator(
-      color: AppTheme.ink,
+      color: AppTheme.of(context).ink,
       onRefresh: viewModel.load,
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),

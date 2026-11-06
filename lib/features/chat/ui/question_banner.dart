@@ -78,9 +78,9 @@ class _QuestionBannerState extends State<QuestionBanner> {
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.warningSurface,
+          color: AppTheme.of(context).warningSurface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.warning),
+          border: Border.all(color: AppTheme.of(context).warning),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,9 +88,9 @@ class _QuestionBannerState extends State<QuestionBanner> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
+                Icon(
                   Icons.help_outline,
-                  color: AppTheme.warning,
+                  color: AppTheme.of(context).warning,
                   size: 20,
                 ),
                 const SizedBox(width: 8),
@@ -101,14 +101,14 @@ class _QuestionBannerState extends State<QuestionBanner> {
                       if (question.header.isNotEmpty)
                         Text(
                           question.header,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.ink,
+                            color: AppTheme.of(context).ink,
                           ),
                         ),
                       Text(
                         question.question,
-                        style: const TextStyle(color: AppTheme.ink),
+                        style: TextStyle(color: AppTheme.of(context).ink),
                         semanticsLabel: 'OpenCode asks: ${question.question}',
                       ),
                     ],
@@ -120,19 +120,22 @@ class _QuestionBannerState extends State<QuestionBanner> {
               const SizedBox(height: 4),
               Text(
                 'Question ${_pageIndex + 1} of ${batch.questions.length}',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                style: TextStyle(
+                  color: AppTheme.of(context).muted,
+                  fontSize: 12,
+                ),
               ),
             ],
             const SizedBox(height: 8),
             if (stale)
-              const Text(
+              Text(
                 'Connector offline -- this question may already be answered or out of date.',
-                style: TextStyle(color: AppTheme.muted),
+                style: TextStyle(color: AppTheme.of(context).muted),
               )
             else if (widget.model.answeringCustomQuestion) ...[
-              const Text(
+              Text(
                 'Type your answer in the message box below.',
-                style: TextStyle(color: AppTheme.muted),
+                style: TextStyle(color: AppTheme.of(context).muted),
               ),
               const SizedBox(height: 4),
               Row(
@@ -250,7 +253,9 @@ class _Option extends StatelessWidget {
                             ? Icons.radio_button_checked
                             : Icons.radio_button_unchecked),
                   size: 20,
-                  color: selected ? AppTheme.warning : AppTheme.muted,
+                  color: selected
+                      ? AppTheme.of(context).warning
+                      : AppTheme.of(context).muted,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -259,15 +264,15 @@ class _Option extends StatelessWidget {
                     children: [
                       Text(
                         label,
-                        style: const TextStyle(
-                          color: AppTheme.ink,
+                        style: TextStyle(
+                          color: AppTheme.of(context).ink,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                       if (description case final text?)
                         Text(
                           text,
-                          style: const TextStyle(color: AppTheme.muted),
+                          style: TextStyle(color: AppTheme.of(context).muted),
                         ),
                     ],
                   ),
@@ -297,17 +302,21 @@ class _CustomAnswerOption extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.edit_outlined, size: 20, color: AppTheme.muted),
+                Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: AppTheme.of(context).muted,
+                ),
                 SizedBox(width: 8),
                 Text(
                   'Type your own answer',
                   style: TextStyle(
-                    color: AppTheme.ink,
+                    color: AppTheme.of(context).ink,
                     fontWeight: FontWeight.w500,
                   ),
                 ),

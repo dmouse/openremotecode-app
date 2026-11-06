@@ -32,14 +32,14 @@ class ProjectsView extends StatelessWidget {
                 contentPadding: const EdgeInsets.all(16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppTheme.border),
+                  side: BorderSide(color: AppTheme.of(context).border),
                 ),
                 leading: const Icon(Icons.folder_outlined),
                 title: Text(project.name),
                 subtitle: Text(project.path),
-                trailing: const Icon(
+                trailing: Icon(
                   Icons.chevron_right,
-                  color: AppTheme.muted,
+                  color: AppTheme.of(context).muted,
                 ),
                 onTap: model.online && !model.loading
                     ? () => model.openProject(project)

@@ -123,7 +123,7 @@ class _ModelNameTile extends StatelessWidget {
     dense: true,
     enabled: enabled,
     selected: selected,
-    selectedColor: AppTheme.ink,
+    selectedColor: AppTheme.of(context).ink,
     title: Text(
       option.modelName,
       style: Theme.of(context).textTheme.titleSmall
@@ -132,10 +132,10 @@ class _ModelNameTile extends StatelessWidget {
     subtitle: Text(
       option.providerName,
       style: Theme.of(context).textTheme.bodySmall
-          ?.copyWith(color: AppTheme.muted),
+          ?.copyWith(color: AppTheme.of(context).muted),
     ),
     trailing: selected
-        ? const Icon(Icons.check, color: AppTheme.ink, size: 20)
+        ? Icon(Icons.check, color: AppTheme.of(context).ink, size: 20)
         : null,
     onTap: enabled ? onTap : null,
   );

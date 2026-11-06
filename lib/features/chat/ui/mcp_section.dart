@@ -39,9 +39,9 @@ class McpSection extends StatelessWidget {
           ],
           if (snapshot != null && !live) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Last-known status. Not live.',
-              style: TextStyle(color: AppTheme.muted),
+              style: TextStyle(color: AppTheme.of(context).muted),
             ),
           ],
           if (snapshot?.available == true && snapshot!.servers.isEmpty) ...[
@@ -70,8 +70,8 @@ class McpSection extends StatelessWidget {
                           : Icons.circle_outlined,
                       size: 10,
                       color: live && server.status == McpStatus.connected
-                          ? AppTheme.success
-                          : AppTheme.muted,
+                          ? AppTheme.of(context).success
+                          : AppTheme.of(context).muted,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -85,7 +85,7 @@ class McpSection extends StatelessWidget {
                             live
                                 ? server.status.label
                                 : 'Last known: ${server.status.label}',
-                            style: const TextStyle(color: AppTheme.muted),
+                            style: TextStyle(color: AppTheme.of(context).muted),
                           ),
                       ],
                     ),

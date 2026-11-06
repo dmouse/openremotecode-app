@@ -287,10 +287,10 @@ class _SectionHeading extends StatelessWidget {
       _ => null,
     };
     final color = switch (age) {
-      null => AppTheme.warning,
-      0 => AppTheme.success,
-      1 => AppTheme.info,
-      _ => AppTheme.muted,
+      null => AppTheme.of(context).warning,
+      0 => AppTheme.of(context).success,
+      1 => AppTheme.of(context).info,
+      _ => AppTheme.of(context).muted,
     };
     final localizations = MaterialLocalizations.of(context);
     return Semantics(
@@ -327,21 +327,23 @@ class _SectionHeading extends StatelessWidget {
                       : [
                           TextSpan(
                             text: ' ${localizations.formatYear(date!)}',
-                            style: const TextStyle(
-                              color: AppTheme.muted,
+                            style: TextStyle(
+                              color: AppTheme.of(context).muted,
                               fontWeight: FontWeight.w400,
                             ),
                           ),
                         ],
                 ),
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: AppTheme.ink,
+                  color: AppTheme.of(context).ink,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(child: Divider(color: AppTheme.border, height: 1)),
+            Expanded(
+              child: Divider(color: AppTheme.of(context).border, height: 1),
+            ),
           ],
         ),
       ),
@@ -366,7 +368,12 @@ class _ChatRow extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       border: showDivider
-          ? const Border(bottom: BorderSide(color: AppTheme.border, width: 0.5))
+          ? Border(
+              bottom: BorderSide(
+                color: AppTheme.of(context).border,
+                width: 0.5,
+              ),
+            )
           : null,
     ),
     child: ListTile(
@@ -385,12 +392,16 @@ class _ChatRow extends StatelessWidget {
         child: Text(
           _updated(context),
           style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: AppTheme.muted),
+              ?.copyWith(color: AppTheme.of(context).muted),
         ),
       ),
       trailing: PopupMenuButton<_ChatAction>(
         tooltip: 'Chat options',
-        icon: const Icon(Icons.more_horiz, color: AppTheme.muted, size: 20),
+        icon: Icon(
+          Icons.more_horiz,
+          color: AppTheme.of(context).muted,
+          size: 20,
+        ),
         onSelected: (action) {
           switch (action) {
             case _ChatAction.pin:
@@ -471,7 +482,7 @@ class _EmptyChats extends StatelessWidget {
           child: Icon(
             searching ? Icons.search_off : Icons.chat_bubble_outline,
             size: 32,
-            color: AppTheme.muted,
+            color: AppTheme.of(context).muted,
           ),
         ),
         const SizedBox(height: 16),

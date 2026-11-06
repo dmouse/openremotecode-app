@@ -22,7 +22,7 @@ class SearchField extends StatelessWidget {
       controller: controller,
       textInputAction: TextInputAction.search,
       style: Theme.of(context).textTheme.bodyMedium
-          ?.copyWith(color: AppTheme.ink),
+          ?.copyWith(color: AppTheme.of(context).ink),
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: Theme.of(context).textTheme.bodyMedium,

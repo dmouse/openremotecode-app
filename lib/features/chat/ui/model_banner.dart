@@ -157,7 +157,7 @@ class _ModelBannerState extends State<ModelBanner> {
                         overflow: TextOverflow.ellipsis,
                         style: text.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.ink,
+                          color: AppTheme.of(context).ink,
                         ),
                       ),
                     ),
@@ -171,7 +171,7 @@ class _ModelBannerState extends State<ModelBanner> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: text.titleMedium?.copyWith(
-                            color: AppTheme.muted,
+                            color: AppTheme.of(context).muted,
                           ),
                         ),
                       ),
@@ -179,7 +179,9 @@ class _ModelBannerState extends State<ModelBanner> {
                     Icon(
                       Icons.chevron_right,
                       size: 20,
-                      color: enabled ? AppTheme.muted : AppTheme.border,
+                      color: enabled
+                          ? AppTheme.of(context).muted
+                          : AppTheme.of(context).border,
                     ),
                   ],
                 ),
@@ -198,11 +200,11 @@ class _ModelBannerState extends State<ModelBanner> {
   Widget _slider(List<String?> stops, {required bool enabled}) => Container(
     height: 56,
     decoration: BoxDecoration(
-      color: AppTheme.inputSurface,
+      color: AppTheme.of(context).inputSurface,
       borderRadius: BorderRadius.circular(28),
       // The same hairline the composer's input carries, so the pill reads as
       // part of that family rather than as a frame drawn around a control.
-      border: Border.all(color: AppTheme.softBorder, width: 0.5),
+      border: Border.all(color: AppTheme.of(context).softBorder, width: 0.5),
     ),
     child: MergeSemantics(
       child: Semantics(
@@ -212,9 +214,9 @@ class _ModelBannerState extends State<ModelBanner> {
             trackHeight: 36,
             trackShape: const RoundedRectSliderTrackShape(),
             activeTrackColor: AppTheme.lime,
-            inactiveTrackColor: AppTheme.neutralSurface,
-            disabledActiveTrackColor: AppTheme.neutralSurface,
-            disabledInactiveTrackColor: AppTheme.neutralSurface,
+            inactiveTrackColor: AppTheme.of(context).neutralSurface,
+            disabledActiveTrackColor: AppTheme.of(context).neutralSurface,
+            disabledInactiveTrackColor: AppTheme.of(context).neutralSurface,
             // Matching the thumb radius keeps the track's ends exactly a
             // thumb's width from the pill's, so the thumb comes to rest flush
             // inside the track at either extreme.
@@ -226,15 +228,16 @@ class _ModelBannerState extends State<ModelBanner> {
             ),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
             thumbColor: AppTheme.ink,
-            disabledThumbColor: AppTheme.border,
+            disabledThumbColor: AppTheme.of(context).border,
             overlayColor: AppTheme.ink.withValues(alpha: 0.08),
             tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 3),
             activeTickMarkColor: AppTheme.ink.withValues(alpha: 0.3),
-            inactiveTickMarkColor: AppTheme.muted.withValues(alpha: 0.35),
-            disabledActiveTickMarkColor: AppTheme.muted.withValues(alpha: 0.2),
-            disabledInactiveTickMarkColor: AppTheme.muted.withValues(
-              alpha: 0.2,
-            ),
+            inactiveTickMarkColor: AppTheme.of(context).muted
+                .withValues(alpha: 0.35),
+            disabledActiveTickMarkColor: AppTheme.of(context).muted
+                .withValues(alpha: 0.2),
+            disabledInactiveTickMarkColor: AppTheme.of(context).muted
+                .withValues(alpha: 0.2),
             showValueIndicator: ShowValueIndicator.never,
           ),
           child: Slider(
@@ -262,7 +265,7 @@ class _ModelBannerState extends State<ModelBanner> {
       message,
       textAlign: TextAlign.center,
       style: Theme.of(context).textTheme.bodySmall
-          ?.copyWith(color: AppTheme.muted),
+          ?.copyWith(color: AppTheme.of(context).muted),
     ),
   );
 }

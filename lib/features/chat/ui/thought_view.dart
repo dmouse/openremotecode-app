@@ -47,7 +47,7 @@ class ThoughtView extends StatelessWidget {
         : 'Thought';
     final color = failed
         ? Theme.of(context).colorScheme.error
-        : AppTheme.warning;
+        : AppTheme.of(context).warning;
     final duration = _duration;
     return ActivityRow(
       icon: failed ? Icons.error_outline : Icons.psychology_outlined,

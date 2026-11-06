@@ -1,10 +1,17 @@
 import 'package:openremotecode/features/settings/data/settings_repository.dart';
+import 'package:openremotecode/features/settings/domain/app_appearance.dart';
 
-final class MemorySettingsRepository implements SettingsRepository {
+final class MemorySettingsRepository
+    implements SettingsRepository, AppearanceRepository {
   MemorySettingsRepository({this.images = true, this.thinking = true});
 
   bool images;
   bool thinking;
+  AppAppearance appearance = AppAppearance.system;
+  @override
+  Future<AppAppearance> readAppearance() async => appearance;
+  @override
+  Future<void> writeAppearance(AppAppearance value) async => appearance = value;
   bool failImagesRead = false;
   bool failThinkingRead = false;
   bool failImagesWrite = false;

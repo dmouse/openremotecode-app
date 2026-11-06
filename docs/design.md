@@ -106,10 +106,31 @@ controls provide focus behavior, labels, and password visibility affordances.
 
 ## Chat color palette
 
-This implemented light-theme palette uses a tinted reading surface and
+The light-theme palette uses a tinted reading surface and
 muted forest-green Markdown emphasis. The same `#F7F8F2` surface is now the
 shared background for every screen, so the conversation no longer stands apart
-from the project and chat lists. It does not define a dark theme.
+from the project and chat lists. Appearance also supports a separate dark palette.
+
+### Appearance
+
+Settings offers **System** (default), **Light**, and **Dark**. System follows the
+device's current brightness; a saved explicit choice overrides it. Changing the
+theme does not recreate the workspace, clear drafts, change authentication, or
+reconnect the relay. Only the appearance enum is saved in ordinary preferences.
+Preference failures keep the current in-memory choice; writes are serialized and
+late restoration cannot replace a newer selection.
+
+Dark mode uses `#161B15` for reading surfaces, `#222920` for inputs, `#252D22`
+for code, `#E7ECE1` for primary text, and `#B4BDAE` for secondary text. Links,
+thoughts, Markdown emphasis, subtasks and status badges have separate accessible
+dark accents in `AppTheme.darkColors`. Lime stays exactly `#DBF4AD` with dark
+foregrounds. Inverted task tabs and jump controls retain their dark fill/lime
+treatment. Full-screen image viewing deliberately remains black.
+
+Widgets resolve semantic colors with `AppTheme.of(context)`, not a global mutable
+palette. Markdown cache invalidation includes the theme. Tests cover brightness
+changes, saved overrides, large-text controls, storage races and failures, normal
+text contrast, and rendering updates without replacing the conversation widget.
 
 Use a warm, lightly green-tinted reading surface and muted forest-green emphasis.
 The goal is to make bold phrases feel like part of the response rather than
@@ -175,8 +196,8 @@ success labels, while preserving the existing lime brand and amber thoughts.
   Confirm headings and status colors remain independent of inline emphasis.
 - Verify subtask title and metadata styles, explicit state labels, and wrapping
   at large text sizes.
-- Treat this as a light-theme specification only. A future dark theme needs
-  separately defined and contrast-checked colors rather than reusing these values.
+- The table above specifies light mode. Dark mode uses its separately defined,
+  contrast-checked semantic palette rather than reusing light foregrounds.
 
 ## Server selection and session behavior
 

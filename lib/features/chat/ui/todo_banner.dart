@@ -237,13 +237,15 @@ class TodoBanner extends StatelessWidget {
                         'Tasks',
                         style: text.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.ink,
+                          color: AppTheme.of(context).ink,
                         ),
                       ),
                     ),
                     Text(
                       total == 0 ? 'None' : '$done of $total done',
-                      style: text.bodySmall?.copyWith(color: AppTheme.muted),
+                      style: text.bodySmall?.copyWith(
+                        color: AppTheme.of(context).muted,
+                      ),
                     ),
                   ],
                 ),
@@ -262,7 +264,7 @@ class TodoBanner extends StatelessWidget {
                       // A brand fill, not a success signal: the row icons and
                       // labels say which tasks are actually done.
                       color: AppTheme.lime,
-                      backgroundColor: AppTheme.neutralSurface,
+                      backgroundColor: AppTheme.of(context).neutralSurface,
                     ),
                   ),
                 ),
@@ -322,17 +324,17 @@ class _TodoRow extends StatelessWidget {
   const _TodoRow({required this.todo});
   final ChatTodo todo;
 
-  (IconData, Color) get _mark => switch (todo.status) {
-    'completed' => (Icons.check_circle, AppTheme.success),
-    'in_progress' => (Icons.radio_button_checked, AppTheme.ink),
-    'cancelled' => (Icons.cancel_outlined, AppTheme.muted),
-    _ => (Icons.radio_button_unchecked, AppTheme.muted),
+  (IconData, Color) _mark(BuildContext context) => switch (todo.status) {
+    'completed' => (Icons.check_circle, AppTheme.of(context).success),
+    'in_progress' => (Icons.radio_button_checked, AppTheme.of(context).ink),
+    'cancelled' => (Icons.cancel_outlined, AppTheme.of(context).muted),
+    _ => (Icons.radio_button_unchecked, AppTheme.of(context).muted),
   };
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final (icon, color) = _mark;
+    final (icon, color) = _mark(context);
     final spent = todo.done || todo.cancelled;
     return MergeSemantics(
       child: Padding(
@@ -353,7 +355,9 @@ class _TodoRow extends StatelessWidget {
                     // agent's, and nothing here renders as markup.
                     todo.content,
                     style: text.bodyLarge?.copyWith(
-                      color: spent ? AppTheme.muted : AppTheme.ink,
+                      color: spent
+                          ? AppTheme.of(context).muted
+                          : AppTheme.of(context).ink,
                       fontWeight: todo.running
                           ? FontWeight.w600
                           : FontWeight.w400,
@@ -364,7 +368,9 @@ class _TodoRow extends StatelessWidget {
                   ),
                   Text(
                     todo.label,
-                    style: text.bodySmall?.copyWith(color: AppTheme.muted),
+                    style: text.bodySmall?.copyWith(
+                      color: AppTheme.of(context).muted,
+                    ),
                   ),
                 ],
               ),

@@ -101,7 +101,7 @@ Widget _headerLines(
       style: Theme.of(context).textTheme.titleMedium?.copyWith(
         fontWeight: FontWeight.w600,
         height: 1,
-        color: AppTheme.ink,
+        color: AppTheme.of(context).ink,
       ),
     ),
     if (ConversationHeader.modelLine(model) case final line?)
@@ -110,7 +110,7 @@ Widget _headerLines(
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall
-            ?.copyWith(color: AppTheme.muted, height: 1.3),
+            ?.copyWith(color: AppTheme.of(context).muted, height: 1.3),
       ),
   ],
 );
@@ -166,8 +166,8 @@ class _HeaderAvatar extends StatelessWidget {
               width: ActivityPresentation.scaledIconSize(context) + 3,
               height: ActivityPresentation.scaledIconSize(context) + 3,
               alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: AppTheme.background,
+              decoration: BoxDecoration(
+                color: AppTheme.of(context).background,
                 shape: BoxShape.circle,
               ),
               child: working
@@ -176,9 +176,9 @@ class _HeaderAvatar extends StatelessWidget {
                       liveRegion: true,
                       child: ActivityAnimations(
                         enabled: true,
-                        child: const ActivityPulse(
+                        child: ActivityPulse(
                           running: true,
-                          color: AppTheme.success,
+                          color: AppTheme.of(context).success,
                         ),
                       ),
                     )
@@ -186,7 +186,9 @@ class _HeaderAvatar extends StatelessWidget {
                       online ? Icons.circle : Icons.circle_outlined,
                       size: 10,
                       semanticLabel: online ? 'Online' : 'Offline',
-                      color: online ? AppTheme.success : AppTheme.muted,
+                      color: online
+                          ? AppTheme.of(context).success
+                          : AppTheme.of(context).muted,
                     ),
             ),
           ),

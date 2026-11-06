@@ -16,19 +16,19 @@ class WorkspaceSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => NavigationDrawer(
-    backgroundColor: AppTheme.background,
+    backgroundColor: AppTheme.of(context).background,
     surfaceTintColor: Colors.transparent,
     indicatorColor: AppTheme.lime,
     selectedIndex: settingsSelected ? 1 : 0,
     onDestinationSelected: (index) =>
         index == 0 ? onConnectionsSelected() : onSettingsSelected(),
-    children: const [
+    children: [
       Padding(
         padding: EdgeInsets.fromLTRB(28, 28, 28, 32),
         child: Text(
           'Remote',
           style: TextStyle(
-            color: AppTheme.ink,
+            color: AppTheme.of(context).ink,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),

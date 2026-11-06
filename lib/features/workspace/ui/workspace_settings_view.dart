@@ -25,6 +25,29 @@ class WorkspaceSettingsView extends StatelessWidget {
       key: const ValueKey('settings-content'),
       padding: const EdgeInsets.all(24),
       children: [
+        ListenableBuilder(
+          listenable: settings,
+          builder: (context, _) => DropdownButtonFormField<AppAppearance>(
+            key: ValueKey(settings.appearance),
+            initialValue: settings.appearance,
+            decoration: const InputDecoration(labelText: 'Appearance'),
+            items: const [
+              DropdownMenuItem(
+                value: AppAppearance.system,
+                child: Text('System'),
+              ),
+              DropdownMenuItem(
+                value: AppAppearance.light,
+                child: Text('Light'),
+              ),
+              DropdownMenuItem(value: AppAppearance.dark, child: Text('Dark')),
+            ],
+            onChanged: (value) {
+              if (value != null) settings.setAppearance(value);
+            },
+          ),
+        ),
+        const SizedBox(height: 24),
         ChatDisplaySection(settings: settings),
         const SizedBox(height: 32),
         const Divider(),

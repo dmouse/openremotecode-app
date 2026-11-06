@@ -440,8 +440,10 @@ class ConversationViewState extends State<ConversationView> {
       ? Container(
           key: ValueKey('plan-rule-$id'),
           padding: const EdgeInsets.only(left: 10),
-          decoration: const BoxDecoration(
-            border: Border(left: BorderSide(color: AppTheme.info, width: 3)),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: AppTheme.of(context).info, width: 3),
+            ),
           ),
           child: child,
         )
@@ -800,7 +802,7 @@ class _UserBubble extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: double.infinity,
     decoration: BoxDecoration(
-      color: AppTheme.codeSurface,
+      color: AppTheme.of(context).codeSurface,
       borderRadius: BorderRadius.circular(12),
     ),
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -810,7 +812,7 @@ class _UserBubble extends StatelessWidget {
         WebLinkText(
           text: text,
           style: Theme.of(context).textTheme.bodyLarge
-              ?.copyWith(color: AppTheme.ink),
+              ?.copyWith(color: AppTheme.of(context).ink),
         ),
         if (plan)
           Align(
@@ -821,7 +823,7 @@ class _UserBubble extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 fontSize: 9,
                 fontStyle: FontStyle.italic,
-                color: AppTheme.muted,
+                color: AppTheme.of(context).muted,
               ),
             ),
           ),

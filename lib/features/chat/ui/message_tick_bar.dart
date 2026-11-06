@@ -79,7 +79,7 @@ class _TickColumn extends StatelessWidget {
               width: _trackWidth,
               height: trackHeight,
               decoration: BoxDecoration(
-                color: AppTheme.softBorder.withValues(alpha: 0.6),
+                color: AppTheme.of(context).softBorder.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(_trackWidth / 2),
               ),
             ),
@@ -152,7 +152,9 @@ class _Tick extends StatelessWidget {
                 width: current ? 5 : 3,
                 height: current ? 10 : 6,
                 decoration: BoxDecoration(
-                  color: current ? AppTheme.ink : AppTheme.muted,
+                  color: current
+                      ? AppTheme.of(context).ink
+                      : AppTheme.of(context).muted,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),

@@ -20,7 +20,7 @@ class TypingIndicator extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: AppTheme.codeSurface,
+            color: AppTheme.of(context).codeSurface,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
@@ -29,7 +29,7 @@ class TypingIndicator extends StatelessWidget {
               kind: ActivityPulseKind.dots,
               running: true,
               animate: animate,
-              color: AppTheme.muted,
+              color: AppTheme.of(context).muted,
             ),
           ),
         ),

@@ -40,9 +40,9 @@ class PermissionBanner extends StatelessWidget {
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.warningSurface,
+          color: AppTheme.of(context).warningSurface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.warning),
+          border: Border.all(color: AppTheme.of(context).warning),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,7 +50,7 @@ class PermissionBanner extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: AppTheme.warning, size: 20),
+                Icon(icon, color: AppTheme.of(context).warning, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -58,9 +58,9 @@ class PermissionBanner extends StatelessWidget {
                     children: [
                       Text(
                         permission.description,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.ink,
+                          color: AppTheme.of(context).ink,
                         ),
                         semanticsLabel:
                             '$label permission requested: '
@@ -69,7 +69,7 @@ class PermissionBanner extends StatelessWidget {
                       if (permission.pattern case final pattern?)
                         Text(
                           pattern,
-                          style: const TextStyle(color: AppTheme.muted),
+                          style: TextStyle(color: AppTheme.of(context).muted),
                         ),
                     ],
                   ),
@@ -82,7 +82,7 @@ class PermissionBanner extends StatelessWidget {
                 model.online()
                     ? 'No longer live -- this request may already be answered or out of date.'
                     : 'Connector offline -- this request may already be answered or out of date.',
-                style: const TextStyle(color: AppTheme.muted),
+                style: TextStyle(color: AppTheme.of(context).muted),
               )
             else
               Wrap(

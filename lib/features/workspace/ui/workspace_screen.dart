@@ -169,9 +169,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       if (!didPop) setState(() => _destination = null);
     },
     child: Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: AppTheme.of(context).background,
       appBar: AppBar(
-        backgroundColor: AppTheme.background,
+        backgroundColor: AppTheme.of(context).background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,

@@ -163,12 +163,12 @@ class ChatComposerBar extends StatelessWidget {
                             backgroundColor: showStop
                                 ? Theme.of(context).colorScheme.error
                                 : mode == PromptMode.plan
-                                ? AppTheme.info
+                                ? AppTheme.of(context).info
                                 : null,
                             foregroundColor: showStop
                                 ? Theme.of(context).colorScheme.onError
                                 : mode == PromptMode.plan
-                                ? Colors.white
+                                ? Theme.of(context).colorScheme.onSecondary
                                 : null,
                           ),
                           onLongPress: showStop || !model.canChangePromptMode
@@ -242,8 +242,8 @@ class _ModelButton extends StatelessWidget {
       tooltip: 'Model and effort',
       icon: const Icon(Icons.auto_awesome, size: 18),
       style: IconButton.styleFrom(
-        foregroundColor: AppTheme.ink,
-        disabledForegroundColor: AppTheme.muted,
+        foregroundColor: AppTheme.of(context).ink,
+        disabledForegroundColor: AppTheme.of(context).muted,
         minimumSize: const Size(48, 48),
         padding: EdgeInsets.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,

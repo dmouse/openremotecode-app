@@ -1,5 +1,12 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../domain/app_appearance.dart';
+
+abstract interface class AppearanceRepository {
+  Future<AppAppearance> readAppearance();
+  Future<void> writeAppearance(AppAppearance value);
+}
+
 /// Per-device chat display choices. No conversation content is stored here.
 abstract interface class SettingsRepository {
   Future<bool> readShowImages();
@@ -8,12 +15,27 @@ abstract interface class SettingsRepository {
   Future<void> writeShowThinkingMessages(bool value);
 }
 
-final class PreferencesSettingsRepository implements SettingsRepository {
+final class PreferencesSettingsRepository
+    implements SettingsRepository, AppearanceRepository {
   PreferencesSettingsRepository([this._preferences]);
 
   // Keep the existing image key so upgrades preserve the user's choice.
   static const _imagesKey = 'chat_show_images_v1';
   static const _thinkingKey = 'chat_show_thinking_v1';
+  static const _appearanceKey = 'app_appearance_v1';
+
+  @override
+  Future<AppAppearance> readAppearance() async {
+    final value = await _prefs.getString(_appearanceKey);
+    return AppAppearance.values
+            .where((mode) => mode.name == value)
+            .firstOrNull ??
+        AppAppearance.system;
+  }
+
+  @override
+  Future<void> writeAppearance(AppAppearance value) =>
+      _prefs.setString(_appearanceKey, value.name);
 
   // Construct lazily: a platform implementation may not be registered yet
   // when the repository is created (notably in widget tests).

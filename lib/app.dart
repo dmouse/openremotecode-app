@@ -110,63 +110,72 @@ class _MainAppState extends State<MainApp> {
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Remote',
-    navigatorKey: _navigatorKey,
-    debugShowCheckedModeBanner: false,
-    theme: AppTheme.light,
-    home: !_ready
-        ? const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(
-                semanticsLabel: 'Restoring session',
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _settings,
+    builder: (context, _) => MaterialApp(
+      title: 'Remote',
+      navigatorKey: _navigatorKey,
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: switch (_settings.appearance) {
+        AppAppearance.system => ThemeMode.system,
+        AppAppearance.light => ThemeMode.light,
+        AppAppearance.dark => ThemeMode.dark,
+      },
+      home: !_ready
+          ? const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  semanticsLabel: 'Restoring session',
+                ),
               ),
+            )
+          : ListenableBuilder(
+              listenable: _auth,
+              builder: (context, _) {
+                final session = _auth.session;
+                if (session != null) {
+                  return WorkspaceScreen(
+                    key: ValueKey(session.scope),
+                    repository: _connections ??=
+                        widget.connectionsRepositoryFactory?.call(_auth) ??
+                        ApiConnectionsRepository(_auth),
+                    auth: _auth,
+                    settings: _settings,
+                  );
+                }
+                // An outstanding challenge takes precedence over both auth screens:
+                // the account exists but cannot be used until it is verified.
+                if (_auth.pendingVerification != null) {
+                  return VerifyEmailScreen(
+                    auth: _auth,
+                    onSignIn: () {
+                      _auth.cancelVerification();
+                      // Leaving registration behind as well, so asking to sign in
+                      // does not drop back onto the registration form.
+                      setState(() => _showRegistration = false);
+                    },
+                  );
+                }
+                // A local flag rather than Navigator.push, to stay consistent with
+                // how `home` is already swapped reactively and to avoid interacting
+                // with the cross-account popUntil reset in _sessionChanged.
+                return _showRegistration
+                    ? RegistrationScreen(
+                        serverSettings: _serverSettings,
+                        auth: _auth,
+                        onBackToSignIn: () =>
+                            setState(() => _showRegistration = false),
+                      )
+                    : LoginScreen(
+                        serverSettings: _serverSettings,
+                        auth: _auth,
+                        onCreateAccount: () =>
+                            setState(() => _showRegistration = true),
+                      );
+              },
             ),
-          )
-        : ListenableBuilder(
-            listenable: _auth,
-            builder: (context, _) {
-              final session = _auth.session;
-              if (session != null) {
-                return WorkspaceScreen(
-                  key: ValueKey(session.scope),
-                  repository: _connections ??=
-                      widget.connectionsRepositoryFactory?.call(_auth) ??
-                      ApiConnectionsRepository(_auth),
-                  auth: _auth,
-                  settings: _settings,
-                );
-              }
-              // An outstanding challenge takes precedence over both auth screens:
-              // the account exists but cannot be used until it is verified.
-              if (_auth.pendingVerification != null) {
-                return VerifyEmailScreen(
-                  auth: _auth,
-                  onSignIn: () {
-                    _auth.cancelVerification();
-                    // Leaving registration behind as well, so asking to sign in
-                    // does not drop back onto the registration form.
-                    setState(() => _showRegistration = false);
-                  },
-                );
-              }
-              // A local flag rather than Navigator.push, to stay consistent with
-              // how `home` is already swapped reactively and to avoid interacting
-              // with the cross-account popUntil reset in _sessionChanged.
-              return _showRegistration
-                  ? RegistrationScreen(
-                      serverSettings: _serverSettings,
-                      auth: _auth,
-                      onBackToSignIn: () =>
-                          setState(() => _showRegistration = false),
-                    )
-                  : LoginScreen(
-                      serverSettings: _serverSettings,
-                      auth: _auth,
-                      onCreateAccount: () =>
-                          setState(() => _showRegistration = true),
-                    );
-            },
-          ),
+    ),
   );
 }

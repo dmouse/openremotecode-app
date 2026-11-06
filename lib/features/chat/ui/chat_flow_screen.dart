@@ -206,7 +206,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
                           model.conversation.supportsPromptMode &&
                           model.conversation.composerKey == source,
                       selected: model.conversation.promptMode == mode,
-                      selectedColor: AppTheme.ink,
+                      selectedColor: AppTheme.of(context).ink,
                       leading: Icon(
                         mode == PromptMode.build
                             ? Icons.build_outlined
@@ -214,7 +214,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
                       ),
                       title: Text(mode == PromptMode.build ? 'Build' : 'Plan'),
                       trailing: model.conversation.promptMode == mode
-                          ? const Icon(Icons.check, color: AppTheme.ink)
+                          ? Icon(Icons.check, color: AppTheme.of(context).ink)
                           : null,
                       onTap: () => Navigator.pop(context, mode),
                     ),
@@ -434,7 +434,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
           if (!didPop) model.back();
         },
         child: Scaffold(
-          backgroundColor: AppTheme.background,
+          backgroundColor: AppTheme.of(context).background,
           appBar: ChatFlowAppBar.build(
             context,
             model: model,

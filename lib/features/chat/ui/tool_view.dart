@@ -82,7 +82,7 @@ class ToolView extends StatelessWidget {
           running: running,
           color: error
               ? Theme.of(context).colorScheme.error
-              : AppTheme.subtaskTitle,
+              : AppTheme.of(context).subtaskTitle,
           title: Text.rich(
             TextSpan(
               children: [
@@ -94,12 +94,15 @@ class ToolView extends StatelessWidget {
                       fontSize: ActivityPresentation.detailSize,
                       color: error
                           ? Theme.of(context).colorScheme.error
-                          : AppTheme.muted,
+                          : AppTheme.of(context).muted,
                     ),
                   ),
               ],
             ),
-            style: ActivityPresentation.style(context, AppTheme.subtaskTitle),
+            style: ActivityPresentation.style(
+              context,
+              AppTheme.of(context).subtaskTitle,
+            ),
           ),
         ),
       ),

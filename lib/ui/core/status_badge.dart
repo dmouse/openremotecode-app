@@ -21,14 +21,26 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final (foreground, background) = switch (tone) {
-      StatusTone.success => (AppTheme.success, AppTheme.successSurface),
-      StatusTone.neutral => (AppTheme.muted, AppTheme.neutralSurface),
-      StatusTone.warning => (AppTheme.warning, AppTheme.warningSurface),
+      StatusTone.success => (
+        AppTheme.of(context).success,
+        AppTheme.of(context).successSurface,
+      ),
+      StatusTone.neutral => (
+        AppTheme.of(context).muted,
+        AppTheme.of(context).neutralSurface,
+      ),
+      StatusTone.warning => (
+        AppTheme.of(context).warning,
+        AppTheme.of(context).warningSurface,
+      ),
       StatusTone.error => (
         theme.colorScheme.onErrorContainer,
         theme.colorScheme.errorContainer,
       ),
-      StatusTone.info => (AppTheme.info, AppTheme.infoSurface),
+      StatusTone.info => (
+        AppTheme.of(context).info,
+        AppTheme.of(context).infoSurface,
+      ),
     };
 
     return Container(

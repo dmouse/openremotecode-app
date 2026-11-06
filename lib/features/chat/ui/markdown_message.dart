@@ -53,12 +53,14 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
 
   Widget _render(BuildContext context) {
     final theme = Theme.of(context);
-    final body = theme.textTheme.bodyLarge!.copyWith(color: AppTheme.ink);
+    final body = theme.textTheme.bodyLarge!.copyWith(
+      color: AppTheme.of(context).ink,
+    );
     final code = body.copyWith(
       fontFamily: 'monospace',
       fontSize: 14,
       height: 1.45,
-      backgroundColor: AppTheme.codeSurface,
+      backgroundColor: AppTheme.of(context).codeSurface,
     );
     // Preserve the entire bounded wire message when rich layout is too costly
     // or deeply indented blocks would leave no readable width on a phone.
@@ -89,7 +91,7 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
           alt == null || alt.isEmpty
               ? '[Image not loaded]'
               : '[Image not loaded: $alt]',
-          style: body.copyWith(color: AppTheme.muted),
+          style: body.copyWith(color: AppTheme.of(context).muted),
         ),
         checkboxBuilder: (checked) => Semantics(
           label: 'Task',
@@ -100,19 +102,19 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
                   ? Icons.check_box_outlined
                   : Icons.check_box_outline_blank,
               size: 20,
-              color: AppTheme.ink,
+              color: AppTheme.of(context).ink,
             ),
           ),
         ),
         styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
           p: body,
-          a: const TextStyle(
-            color: AppTheme.info,
+          a: TextStyle(
+            color: AppTheme.of(context).info,
             decoration: TextDecoration.underline,
           ),
-          strong: const TextStyle(
+          strong: TextStyle(
             fontWeight: FontWeight.bold,
-            color: AppTheme.markdownBold,
+            color: AppTheme.of(context).markdownBold,
           ),
           h1: body.copyWith(
             fontSize: 24,
@@ -134,15 +136,18 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
           code: code,
           codeblockPadding: const EdgeInsets.all(12),
           codeblockDecoration: BoxDecoration(
-            color: AppTheme.codeSurface,
-            border: Border.all(color: AppTheme.border),
+            color: AppTheme.of(context).codeSurface,
+            border: Border.all(color: AppTheme.of(context).border),
             borderRadius: BorderRadius.circular(8),
           ),
-          blockquote: body.copyWith(color: AppTheme.muted),
+          blockquote: body.copyWith(color: AppTheme.of(context).muted),
           blockquotePadding: const EdgeInsets.all(12),
-          blockquoteDecoration: const BoxDecoration(
+          blockquoteDecoration: BoxDecoration(
             border: Border(
-              left: BorderSide(color: AppTheme.selectedBorder, width: 3),
+              left: BorderSide(
+                color: AppTheme.of(context).selectedBorder,
+                width: 3,
+              ),
             ),
           ),
           tableHead: body.copyWith(fontWeight: FontWeight.w700),
@@ -150,9 +155,9 @@ class _MarkdownMessageState extends State<MarkdownMessage> {
           tableHeadAlign: TextAlign.left,
           tableColumnWidth: const FixedColumnWidth(176),
           tableCellsPadding: const EdgeInsets.all(12),
-          tableBorder: TableBorder.all(color: AppTheme.border),
-          horizontalRuleDecoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: AppTheme.border)),
+          tableBorder: TableBorder.all(color: AppTheme.of(context).border),
+          horizontalRuleDecoration: BoxDecoration(
+            border: Border(top: BorderSide(color: AppTheme.of(context).border)),
           ),
         ),
       ),

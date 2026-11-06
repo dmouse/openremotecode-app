@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import 'data/settings_repository.dart';
+import 'domain/app_appearance.dart';
+export 'domain/app_appearance.dart';
 
 /// App-wide, per-device chat display settings. Both choices default on.
 final class SettingsViewModel extends ChangeNotifier {
@@ -15,6 +17,26 @@ final class SettingsViewModel extends ChangeNotifier {
   Future<void>? _loading;
   Future<void> _imageWrites = Future<void>.value();
   Future<void> _thinkingWrites = Future<void>.value();
+  AppAppearance _appearance = AppAppearance.system;
+  int _appearanceRevision = 0;
+  Future<void> _appearanceWrites = Future<void>.value();
+  AppAppearance get appearance => _appearance;
+
+  Future<void> setAppearance(AppAppearance value) {
+    if (_disposed || _appearance == value) return Future<void>.value();
+    _appearanceRevision++;
+    _appearance = value;
+    notifyListeners();
+    return _appearanceWrites = _appearanceWrites.then((_) async {
+      try {
+        if (_repository case final AppearanceRepository repository) {
+          await repository.writeAppearance(value);
+        }
+      } catch (_) {
+        // An unavailable preference store must not block the effective theme.
+      }
+    });
+  }
 
   bool get showImages => _showImages;
   bool get showThinkingMessages => _showThinkingMessages;
@@ -24,6 +46,18 @@ final class SettingsViewModel extends ChangeNotifier {
   Future<void> _load() async {
     final imageRevision = _imageRevision;
     final thinkingRevision = _thinkingRevision;
+    final appearanceRevision = _appearanceRevision;
+    try {
+      if (_repository case final AppearanceRepository repository) {
+        final appearance = await repository.readAppearance();
+        if (!_disposed && appearanceRevision == _appearanceRevision) {
+          _appearance = appearance;
+          notifyListeners();
+        }
+      }
+    } catch (_) {
+      // Keep the system default or a newer choice.
+    }
     // A failure reading one key must not prevent the other from loading.
     try {
       final value = await _repository.readShowImages();

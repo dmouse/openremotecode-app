@@ -59,25 +59,28 @@ class SubtaskView extends StatelessWidget {
           : Icons.account_tree_outlined,
       color: task.status == 'error'
           ? Theme.of(context).colorScheme.error
-          : AppTheme.subtaskTitle,
+          : AppTheme.of(context).subtaskTitle,
       title: Text(
         task.label,
-        style: ActivityPresentation.style(context, AppTheme.subtaskTitle),
+        style: ActivityPresentation.style(
+          context,
+          AppTheme.of(context).subtaskTitle,
+        ),
       ),
       metadata: Text(
         detail,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: AppTheme.muted,
+          color: AppTheme.of(context).muted,
           fontSize: ActivityPresentation.detailSize,
         ),
       ),
       trailing: onOpen == null
           ? null
-          : const Icon(
+          : Icon(
               Icons.chevron_right,
               size: ActivityPresentation.iconSize,
               applyTextScaling: true,
-              color: AppTheme.muted,
+              color: AppTheme.of(context).muted,
             ),
     );
     return Semantics(
@@ -93,8 +96,8 @@ class SubtaskView extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   padding: EdgeInsets.zero,
                   minimumSize: const Size(48, 48),
-                  foregroundColor: AppTheme.ink,
-                  disabledForegroundColor: AppTheme.muted,
+                  foregroundColor: AppTheme.of(context).ink,
+                  disabledForegroundColor: AppTheme.of(context).muted,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),

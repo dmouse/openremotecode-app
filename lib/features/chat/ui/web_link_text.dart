@@ -106,8 +106,8 @@ class _WebLinkTextState extends State<WebLinkText> {
           TextSpan(
             text: link.label,
             recognizer: recognizer,
-            style: const TextStyle(
-              color: AppTheme.info,
+            style: TextStyle(
+              color: AppTheme.of(context).info,
               decoration: TextDecoration.underline,
             ),
           ),

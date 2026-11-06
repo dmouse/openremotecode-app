@@ -43,12 +43,12 @@ class ShellView extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = failed
         ? Theme.of(context).colorScheme.error
-        : AppTheme.subtaskTitle;
-    const codeStyle = TextStyle(
+        : AppTheme.of(context).subtaskTitle;
+    final codeStyle = TextStyle(
       fontFamily: 'monospace',
       fontSize: 13,
       height: 1.4,
-      color: AppTheme.ink,
+      color: AppTheme.of(context).ink,
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -96,7 +96,9 @@ class ShellView extends StatelessWidget {
               bottom: 8,
             ),
             child: DecoratedBox(
-              decoration: const BoxDecoration(color: AppTheme.codeSurface),
+              decoration: BoxDecoration(
+                color: AppTheme.of(context).codeSurface,
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(

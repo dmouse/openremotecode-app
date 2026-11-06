@@ -91,9 +91,9 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen>
           }
         },
         child: Scaffold(
-          backgroundColor: AppTheme.background,
+          backgroundColor: AppTheme.of(context).background,
           appBar: AppBar(
-            backgroundColor: AppTheme.background,
+            backgroundColor: AppTheme.of(context).background,
             surfaceTintColor: Colors.transparent,
             scrolledUnderElevation: 0,
             title: const Text('Chat details'),
@@ -110,19 +110,19 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen>
                         textAlign: TextAlign.center,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.ink,
+                          color: AppTheme.of(context).ink,
                         ),
                       ),
-                      const Divider(
+                      Divider(
                         height: 40,
                         thickness: 1,
-                        color: AppTheme.border,
+                        color: AppTheme.of(context).border,
                       ),
                       McpSection(model: _mcp),
-                      const Divider(
+                      Divider(
                         height: 40,
                         thickness: 1,
-                        color: AppTheme.border,
+                        color: AppTheme.of(context).border,
                       ),
                       ChatDetailsActions(model: model),
                     ],

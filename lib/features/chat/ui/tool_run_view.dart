@@ -27,7 +27,7 @@ class ToolRunView extends StatelessWidget {
     final failed = run.failed;
     final color = failed
         ? Theme.of(context).colorScheme.error
-        : AppTheme.subtaskTitle;
+        : AppTheme.of(context).subtaskTitle;
     return Semantics(
       label: '${run.summary}. Double tap to view details.',
       child: ExcludeSemantics(
@@ -72,7 +72,7 @@ Future<void> showToolRunSheet(
 }) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppTheme.background,
+    backgroundColor: AppTheme.of(context).background,
     showDragHandle: true,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
@@ -146,7 +146,7 @@ class _ToolRunSheetBodyState extends State<_ToolRunSheetBody> {
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.ink,
+                    color: AppTheme.of(context).ink,
                   ),
                 ),
               ),
@@ -171,7 +171,7 @@ class _ToolRunSheetBodyState extends State<_ToolRunSheetBody> {
                               child: Container(
                                 width: 1,
                                 height: 10,
-                                color: AppTheme.border,
+                                color: AppTheme.of(context).border,
                               ),
                             )
                           : const SizedBox(height: 12),

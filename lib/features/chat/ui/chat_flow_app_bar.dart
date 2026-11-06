@@ -31,12 +31,12 @@ class ChatFlowAppBar {
     final page = model.page;
     final conversation = model.conversation;
     return AppBar(
-      backgroundColor: AppTheme.background,
+      backgroundColor: AppTheme.of(context).background,
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: AppTheme.border),
+        child: Container(height: 1, color: AppTheme.of(context).border),
       ),
       centerTitle: page == ChatPage.conversation ? false : null,
       leadingWidth: page == ChatPage.conversation ? 56 : null,
@@ -74,7 +74,9 @@ class ChatFlowAppBar {
                     : Icons.cloud_off_outlined,
                 size: 20,
                 semanticLabel: model.online ? 'Online' : 'Offline',
-                color: model.online ? AppTheme.success : AppTheme.muted,
+                color: model.online
+                    ? AppTheme.of(context).success
+                    : AppTheme.of(context).muted,
               ),
             ),
           ),
@@ -82,7 +84,7 @@ class ChatFlowAppBar {
           PopupMenuButton<String>(
             tooltip: 'Chat options',
             enabled: !busy,
-            icon: const Icon(Icons.more_vert, color: AppTheme.muted),
+            icon: Icon(Icons.more_vert, color: AppTheme.of(context).muted),
             onSelected: (action) {
               if (action == 'rename') onRename();
               if (action == 'fork') {
