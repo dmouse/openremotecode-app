@@ -104,6 +104,7 @@ void main() {
           ..._fixture['request'] as Map<String, dynamic>,
           'includeTools': true,
           'includeShell': true,
+          'includeCode': true,
           'includeTodos': true,
         },
       );

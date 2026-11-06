@@ -1,6 +1,6 @@
 import 'chat_models.dart';
 
-/// A maximal run of strictly consecutive tool-call parts within one message,
+/// A maximal run of consecutive tool-call parts (ignoring blank text),
 /// condensed into a single summary row in the conversation view. Every part
 /// has a non-null [ChatMessagePart.tool]; order is preserved from the source
 /// message.
@@ -13,12 +13,13 @@ final class ToolRun {
 
   /// A natural-language tally by operation, e.g. "Ran 3 commands, used a
   /// tool". Unknown/MCP/other tools fall under "tool" already at the source
-  /// (see `ChatTool.operation`), so every value here is one of the eight
-  /// known operations.
+  /// (see `ChatTool.operation`). Code execution has its own tally rather than
+  /// being described as shell commands.
   String get summary {
     final counts = <String, int>{};
     for (final part in parts) {
-      final operation = part.tool!.operation;
+      final tool = part.tool!;
+      final operation = tool.code != null ? 'code' : tool.operation;
       counts[operation] = (counts[operation] ?? 0) + 1;
     }
     final joined = _operationOrder
@@ -33,6 +34,7 @@ final class ToolRun {
 
 const _operationOrder = [
   'execute',
+  'code',
   'edit',
   'write',
   'read',
@@ -40,24 +42,27 @@ const _operationOrder = [
   'list',
   'fetch',
   'tool',
+  'question',
 ];
 
 // Lowercase: only the first clause of a joined summary is capitalized.
 String _phrase(String operation, int count) => switch (operation) {
   'execute' => 'ran ${count == 1 ? 'a command' : '$count commands'}',
+  'code' => count == 1 ? 'ran code' : 'ran code $count times',
   'edit' => 'edited ${count == 1 ? 'a file' : '$count files'}',
   'write' => 'created ${count == 1 ? 'a file' : '$count files'}',
   'read' => 'read ${count == 1 ? 'a file' : '$count files'}',
   'search' => count == 1 ? 'searched once' : 'searched $count times',
   'list' => count == 1 ? 'listed once' : 'listed $count times',
   'fetch' => 'fetched ${count == 1 ? 'a URL' : '$count URLs'}',
+  'question' => 'asked ${count == 1 ? 'a question' : '$count questions'}',
   _ => 'used ${count == 1 ? 'a tool' : '$count tools'}',
 };
 
 /// Splits [parts] into a display plan: a `ChatMessagePart` renders exactly as
 /// it does today; a [ToolRun] replaces a run of [minLength] or more
-/// consecutive tool-call parts. Text, reasoning, subtask and image parts
-/// always break a run and are never absorbed into one.
+/// consecutive tool-call parts. Nonblank text, reasoning, subtask and image
+/// parts always break a run. Blank text is omitted from presentation.
 List<Object> condenseToolRuns(
   Iterable<ChatMessagePart> parts, {
   int minLength = 2,
@@ -75,6 +80,7 @@ List<Object> condenseToolRuns(
   }
 
   for (final part in parts) {
+    if (_blankText(part)) continue;
     if (part.tool != null) {
       run.add(part);
     } else {
@@ -86,15 +92,15 @@ List<Object> condenseToolRuns(
   return plan;
 }
 
-/// The ids of shell-bearing tool parts that would be absorbed into a
+/// The ids of tool parts with execution details that would be absorbed into a
 /// condensed [ToolRun] (a run of [minLength] or more consecutive tool
 /// parts), without building the full [condenseToolRuns] plan. For a call
 /// site that only needs this yes/no membership check -- e.g. deciding which
-/// shell rows can still be expanded inline -- this skips allocating a
+/// execution rows can still be expanded inline -- this skips allocating a
 /// `List<Object>` plan and a `ToolRun` per run, which matters when it runs
 /// over every retained message (including off-screen ones) on every
 /// rebuild, not just the messages actually on screen.
-Set<String> condensedShellPartIds(
+Set<String> condensedDetailPartIds(
   Iterable<ChatMessagePart> parts, {
   int minLength = 2,
 }) {
@@ -103,13 +109,14 @@ Set<String> condensedShellPartIds(
   void flush() {
     if (run.length >= minLength) {
       for (final part in run) {
-        if (part.tool!.shell != null) ids.add(part.id);
+        if (part.tool!.hasDetails) ids.add(part.id);
       }
     }
     run.clear();
   }
 
   for (final part in parts) {
+    if (_blankText(part)) continue;
     if (part.tool != null) {
       run.add(part);
     } else {
@@ -119,6 +126,9 @@ Set<String> condensedShellPartIds(
   flush();
   return ids;
 }
+
+bool _blankText(ChatMessagePart part) =>
+    part.type == 'text' && part.text.trim().isEmpty;
 
 /// True when [message] contributes nothing but tool-call parts -- eligible
 /// to merge with adjacent such messages into one cross-message [ToolRun].
@@ -130,8 +140,8 @@ Set<String> condensedShellPartIds(
 bool isPureToolMessage(ChatMessage message) =>
     message.role == 'assistant' &&
     !message.truncated &&
-    (message.parts?.isNotEmpty ?? false) &&
-    message.parts!.every((part) => part.tool != null);
+    (message.parts?.any((part) => part.tool != null) ?? false) &&
+    message.parts!.every((part) => part.tool != null || _blankText(part));
 
 /// Messages that would render something -- drops empty projected records
 /// (including synthetic shell-only user messages) so they never introduce a
@@ -216,7 +226,8 @@ ToolRun? findToolRun(
   for (final (start, end) in pureToolMessageRuns(messages)) {
     if (start != index) continue;
     final merged = <ChatMessagePart>[
-      for (var j = start; j <= end; j++) ...messages[j].parts!,
+      for (var j = start; j <= end; j++)
+        ...messages[j].parts!.where((part) => part.tool != null),
     ];
     for (final item in condenseToolRuns(merged)) {
       if (item is ToolRun && item.parts.first.id == leadingPartId) return item;

@@ -94,14 +94,14 @@ void main() {
     expect(ToolRun([_tool('a', 'read')]).running, isFalse);
   });
 
-  test('condensedShellPartIds agrees exactly with the shell ids condenseToolRuns absorbs', () {
+  test('condensedDetailPartIds agrees exactly with the detail ids condenseToolRuns absorbs', () {
     final parts = [
       _tool('a', 'read'),
       _shellTool('s'), // absorbed: part of a run of 2 with 'a'
       _text('lone'),
       _shellTool('b'), // inline: alone, below the threshold
     ];
-    final absorbed = condensedShellPartIds(parts);
+    final absorbed = condensedDetailPartIds(parts);
     final plan = condenseToolRuns(parts);
     final expectedAbsorbed = <String>{
       for (final item in plan)

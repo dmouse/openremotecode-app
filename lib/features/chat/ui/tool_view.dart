@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../ui/core/app_theme.dart';
 import '../domain/chat_models.dart';
 import 'activity_row.dart';
-import 'shell_view.dart';
+import 'execution_view.dart';
 import '../domain/activity.dart';
 import 'activity_presentation.dart';
 
@@ -58,9 +58,13 @@ class ToolView extends StatelessWidget {
           '${duration ~/ 60000}m ${(duration % 60000) ~/ 1000}s',
     ].join(' · ');
     final error = state == 'failed';
-    if (tool.shell case final shell?) {
-      return ShellView(
-        shell: shell,
+    if (tool.hasDetails) {
+      final code = tool.code;
+      return ExecutionView(
+        source: code?.source ?? tool.shell!.command,
+        output: code?.output ?? tool.shell!.output,
+        truncated: code?.truncated ?? tool.shell!.truncated,
+        isCode: code != null,
         detail: detail,
         waiting: unfinished,
         failed: error,

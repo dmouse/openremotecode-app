@@ -569,6 +569,9 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
         if (repository.chatSupports(connectorId, 'chat.tools') &&
             repository.chatSupports(connectorId, 'chat.shell'))
           'includeShell': true,
+        if (repository.chatSupports(connectorId, 'chat.tools') &&
+            repository.chatSupports(connectorId, 'chat.code'))
+          'includeCode': true,
         if (repository.chatSupports(connectorId, 'chat.activities'))
           'includeActivities': true,
         if (showImages && repository.chatSupports(connectorId, 'chat.images'))
@@ -642,6 +645,9 @@ final class ConversationViewModel extends ChangeNotifier with ChatRequestScope {
         if (repository.chatSupports(connectorId, 'chat.tools') &&
             repository.chatSupports(connectorId, 'chat.shell'))
           'includeShell': true,
+        if (repository.chatSupports(connectorId, 'chat.tools') &&
+            repository.chatSupports(connectorId, 'chat.code'))
+          'includeCode': true,
         if (repository.chatSupports(connectorId, 'chat.activities'))
           'includeActivities': true,
         if (showImages && repository.chatSupports(connectorId, 'chat.images'))

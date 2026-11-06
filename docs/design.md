@@ -567,7 +567,9 @@ Failures retain an error icon and explicit Failed label in the error color;
 the description remains slate blue.
 Unknown tools use a bounded, humanized tool name as a description. Summary rows
 do not expose raw command/output/error bodies or open files/execute actions.
-Negotiated shell details are the explicit exception described below.
+Negotiated shell/code details are the explicit exceptions described below.
+Skill loading includes its bounded name, for example `Load skill: context7-mcp`,
+without exposing the skill's contents.
 
 Thoughts, tools and subtasks use 12-pixel icons matching the header font size,
 without per-glyph optical enlargement. Icons, spinners and disclosure arrows scale
@@ -582,7 +584,11 @@ have a 32-pixel minimum height and grow naturally; navigable subtasks have a
 24-pixel gap, including when OpenCode splits them across messages. Whitespace-only
 text parts and empty projected records (including synthetic-only shell user
 messages) do not add padding or interrupt activity.
-Visible history messages keep their own keys; they are not merged. The 24-pixel
+Visible history messages keep their own keys. Consecutive tool calls, including
+code execution and skills, condense into one tappable summary across assistant
+messages; blank text does not split a group. Its detail sheet shows the original
+contextual rows with independently expandable execution details. Prose, thoughts,
+images and subtasks keep their boundaries. The 24-pixel
 separation remains at user/prose boundaries and after truncation notices.
 
 Explicit states and icons distinguish work without relying on color. Unfinished
@@ -612,6 +618,17 @@ the choices. No detail or choice is persisted to disk. The toggle is keyboard an
 screen-reader accessible and reports its expanded state. Literal content does not
 execute commands, open links or fetch images, and terminal controls are stripped.
 See the [shell contract and threat analysis](../../packages/protocol/CHAT-SHELL.md).
+
+### Collapsible code history
+
+When both `chat.tools` and `chat.code` are advertised, mobile also requests code
+details. Run code uses the same collapsed execution presentation as shell history,
+with a code icon and Code/Output headings rather than Command/Output. Expand it
+inline when alone, or inside the compact tool group's detail sheet. Code and
+results stay selectable literal text; they are never executed or interpreted as
+markup. Collapse, live updates, missing/failed/truncated output and history reset
+follow shell behavior. Older connectors retain the summary-only label.
+See the [code contract and threat analysis](../../packages/protocol/CHAT-CODE.md).
 
 ### Shared live activities
 

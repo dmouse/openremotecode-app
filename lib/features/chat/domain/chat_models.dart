@@ -122,10 +122,16 @@ final class ChatMessage {
                       part.text.length +
                       (part.tool?.shell?.command.length ?? 0) +
                       (part.tool?.shell?.output.length ?? 0) +
+                      (part.tool?.code?.source.length ?? 0) +
+                      (part.tool?.code?.output.length ?? 0) +
                       (part.image?.data.length ?? 0),
                 ) >
                 48000 ||
-            (parts.any((part) => part.tool?.shell?.truncated == true) &&
+            (parts.any(
+                  (part) =>
+                      part.tool?.shell?.truncated == true ||
+                      part.tool?.code?.truncated == true,
+                ) &&
                 value['truncated'] != true) ||
             parts
                     .where((part) => !part.isReasoning && !part.isImage)
@@ -277,11 +283,14 @@ final class ChatTool {
     this.description,
     this.durationMs,
     this.shell,
+    this.code,
   });
   final String operation, status;
   final String? description;
   final int? durationMs;
   final ChatShell? shell;
+  final ChatCode? code;
+  bool get hasDetails => shell != null || code != null;
 
   factory ChatTool.parse(Map<String, dynamic> value) {
     final duration = value['durationMs'];
@@ -300,9 +309,12 @@ final class ChatTool {
             'description',
             'durationMs',
             'shell',
+            'code',
           ].contains(key),
         ) ||
         (value.containsKey('shell') && value['operation'] != 'execute') ||
+        (value.containsKey('code') && value['operation'] != 'execute') ||
+        (value.containsKey('shell') && value.containsKey('code')) ||
         (value.containsKey('durationMs') &&
             (duration is! int ||
                 duration < 0 ||
@@ -319,6 +331,39 @@ final class ChatTool {
       shell: value.containsKey('shell')
           ? ChatShell.parse(requiredMap(value, 'shell'))
           : null,
+      code: value.containsKey('code')
+          ? ChatCode.parse(requiredMap(value, 'code'))
+          : null,
+    );
+  }
+}
+
+final class ChatCode {
+  const ChatCode({
+    required this.source,
+    required this.output,
+    required this.truncated,
+  });
+  final String source, output;
+  final bool truncated;
+
+  factory ChatCode.parse(Map<String, dynamic> value) {
+    final source = value['source'];
+    final output = value['output'];
+    if (source is! String ||
+        source.length > 8000 ||
+        output is! String ||
+        output.length > 32000 ||
+        value['truncated'] is! bool ||
+        value.keys.any(
+          (key) => !['source', 'output', 'truncated'].contains(key),
+        )) {
+      throw const FormatException();
+    }
+    return ChatCode(
+      source: source,
+      output: output,
+      truncated: value['truncated'] as bool,
     );
   }
 }

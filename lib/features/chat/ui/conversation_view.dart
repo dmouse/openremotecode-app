@@ -30,8 +30,8 @@ class ConversationViewState extends State<ConversationView> {
   final _scroll = ScrollController();
   bool _checkScheduled = false;
   late int _revision;
-  final _expandedShells = <(String, String)>{};
-  late int _shellRevision;
+  final _expandedTools = <(String, String)>{};
+  late int _detailRevision;
   ChatMessage? _renderedLatest;
   bool _renderedTyping = false;
   final _messageAnchors = <String, GlobalKey>{};
@@ -65,7 +65,7 @@ class ConversationViewState extends State<ConversationView> {
   void initState() {
     super.initState();
     _revision = model.messageHistoryRevision;
-    _shellRevision = model.messageHistoryRevision;
+    _detailRevision = model.messageHistoryRevision;
     model.addListener(_scheduleCheck);
     _scroll.addListener(_scheduleCheck);
     _scheduleCheck();
@@ -78,7 +78,7 @@ class ConversationViewState extends State<ConversationView> {
       oldWidget.model.removeListener(_scheduleCheck);
       model.addListener(_scheduleCheck);
       _revision = -1;
-      _shellRevision = -1;
+      _detailRevision = -1;
     }
     _scheduleCheck();
   }
@@ -382,10 +382,10 @@ class ConversationViewState extends State<ConversationView> {
         key: ValueKey(part.id),
         tool: tool,
         activity: part.activity,
-        expanded: _expandedShells.contains((message.id, part.id)),
+        expanded: _expandedTools.contains((message.id, part.id)),
         onToggle: () => setState(() {
           final id = (message.id, part.id);
-          if (!_expandedShells.remove(id)) _expandedShells.add(id);
+          if (!_expandedTools.remove(id)) _expandedTools.add(id);
         }),
         online: model.online(),
         active: model.activityLive && ['busy', 'retry'].contains(model.status),
@@ -487,9 +487,9 @@ class ConversationViewState extends State<ConversationView> {
     _renderedTyping = showTyping;
     final retainedIds = model.messages.map((m) => m.id).toSet();
     _messageAnchors.removeWhere((id, _) => !retainedIds.contains(id));
-    if (_shellRevision != model.messageHistoryRevision) {
-      _expandedShells.clear();
-      _shellRevision = model.messageHistoryRevision;
+    if (_detailRevision != model.messageHistoryRevision) {
+      _expandedTools.clear();
+      _detailRevision = model.messageHistoryRevision;
     }
     // Empty projected records (including synthetic-only shell user messages) must not
     // introduce phantom gaps or break a run of activity rows.
@@ -515,7 +515,8 @@ class ConversationViewState extends State<ConversationView> {
     )) {
       mergedRuns[messages[start].id] = ToolRun(
         List.unmodifiable([
-          for (var j = start; j <= end; j++) ...messages[j].parts!,
+          for (var j = start; j <= end; j++)
+            ...messages[j].parts!.where((part) => part.tool != null),
         ]),
       );
       for (var j = start + 1; j <= end; j++) {
@@ -523,14 +524,14 @@ class ConversationViewState extends State<ConversationView> {
       }
     }
     // Retain only IDs from bounded, in-memory history, including off-screen
-    // rows -- and only shell rows that still render inline; one absorbed
+    // rows -- and only execution rows that still render inline; one absorbed
     // into a condensed ToolRun (same-message or, now, a merged cross-message
     // run) is only ever expandable inside its sheet, which keeps its own
     // separate, sheet-local expand state. Uses the cheaper
-    // condensedShellPartIds (no ToolRun/plan allocation) since this runs
+    // condensedDetailPartIds (no ToolRun/plan allocation) since this runs
     // over every retained message, including off-screen ones, on every
     // rebuild -- not just whichever message is actually on screen.
-    final shellIds = <(String, String)>{};
+    final detailIds = <(String, String)>{};
     for (final message in model.messages) {
       if (suppressedMessageIds.contains(message.id) ||
           mergedRuns.containsKey(message.id)) {
@@ -538,14 +539,14 @@ class ConversationViewState extends State<ConversationView> {
       }
       final parts = message.parts;
       if (parts == null) continue;
-      final absorbed = condensedShellPartIds(parts);
+      final absorbed = condensedDetailPartIds(parts);
       for (final part in parts) {
-        if (part.tool?.shell != null && !absorbed.contains(part.id)) {
-          shellIds.add((message.id, part.id));
+        if (part.tool?.hasDetails == true && !absorbed.contains(part.id)) {
+          detailIds.add((message.id, part.id));
         }
       }
     }
-    _expandedShells.removeWhere((id) => !shellIds.contains(id));
+    _expandedTools.removeWhere((id) => !detailIds.contains(id));
     return ActivityAnimations(
       enabled: model.activityLive || (model.isSending && model.online()),
       child: NotificationListener<ScrollMetricsNotification>(

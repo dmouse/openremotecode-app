@@ -28,48 +28,194 @@ final _v2ToolsFixture = jsonDecode(
   File('../packages/protocol/test/fixtures/chat-v2-tools-v1.json')
       .readAsStringSync(),
 ) as Map<String, dynamic>;
+final _codeFixture = jsonDecode(
+  File('../packages/protocol/test/fixtures/chat-code-v1.json')
+      .readAsStringSync(),
+) as Map<String, dynamic>;
 
 void main() {
-  testWidgets('V2 patch, read, fetch, execute and shell display shared summaries', (
-    tester,
-  ) async {
-    final source = jsonDecode(jsonEncode(_v2ToolsFixture['response']))
-        as Map<String, dynamic>;
-    final parts = source['parts'] as List<dynamic>;
-    for (var i = 0; i < parts.length; i++) {
-      parts[i]['id'] = 'part_$i';
-    }
-    final model = ChatViewModel(_Repository(), 'connector')
-      ..conversation.messages = [ChatMessage.parse(source)];
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light,
-        home: Scaffold(body: ConversationView(model: model.conversation)),
-      ),
-    );
-    await tester.tap(find.byType(ToolRunView));
-    await tester.pumpAndSettle();
-    for (final description in [
-      'lib/example.dart',
-      'mobile/lib/main.dart',
-      'docs.example.test',
-      'Run code',
-      '"needle" in mobile/lib',
+  test('shared code details are strict and share message bounds', () {
+    final source = jsonDecode(
+      jsonEncode(_codeFixture['response']),
+    ) as Map<String, dynamic>;
+    final message = ChatMessage.parse(source);
+    final tool = source['parts'][0]['tool'] as Map<String, dynamic>;
+    final code = tool['code'] as Map<String, dynamic>;
+    expect(message.parts!.first.tool!.code!.output, '3\n');
+    for (final invalid in [
+      {...tool, 'operation': 'read'},
+      {...tool, 'code': null},
+      {
+        ...tool,
+        'shell': {'command': '', 'output': '', 'truncated': false},
+      },
+      {
+        ...tool,
+        'code': {...code, 'source': 'c' * 8001},
+      },
+      {
+        ...tool,
+        'code': {...code, 'output': 'o' * 32001},
+      },
+      {
+        ...tool,
+        'code': {...code, 'truncated': null},
+      },
+      {
+        ...tool,
+        'code': {...code, 'metadata': <String, dynamic>{}},
+      },
     ]) {
-      expect(find.text(description), findsOneWidget);
+      expect(() => ChatTool.parse(invalid), throwsA(isA<Exception>()));
     }
-    expect(find.text("printf 'v2 shell\\n'"), findsNothing);
-    await tester.tap(find.descendant(
-      of: find.byType(ToolView).at(1),
-      matching: find.byType(TextButton),
-    ));
-    await tester.pump();
-    expect(find.text("printf 'v2 shell\\n'"), findsOneWidget);
-    expect(find.text('v2 shell\n'), findsOneWidget);
-    expect(find.textContaining('PRIVATE_', findRichText: true), findsNothing);
-    await tester.pumpWidget(const SizedBox());
-    model.dispose();
+    source['parts'][0]['tool']['code']['truncated'] = true;
+    expect(() => ChatMessage.parse(source), throwsFormatException);
+    source['truncated'] = true;
+    expect(ChatMessage.parse(source).truncated, isTrue);
+    source['parts'][0]['tool']['code'] = {
+      'source': 'c' * 8000,
+      'output': 'o' * 32000,
+      'truncated': true,
+    };
+    source['parts'].add({'id': 'text', 'type': 'text', 'text': 't' * 8000});
+    source['text'] += 't' * 8000;
+    expect(() => ChatMessage.parse(source), throwsFormatException);
   });
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets(
+      'code and named skills share a compact group with expandable details at $scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 1600);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final semantics = tester.ensureSemantics();
+        final source = jsonDecode(
+          jsonEncode(_codeFixture['response']),
+        ) as Map<String, dynamic>;
+        // Separate assistant records, plus blank parts, still form one task group.
+        final codePart = source['parts'][0];
+        final skillPart = source['parts'][1];
+        final model = ChatViewModel(_Repository(), 'connector');
+        void update() => model.conversation.messages = [
+          ChatMessage.parse({
+            ...source,
+            'text': codePart['text'],
+            'parts': [
+              codePart,
+              {'id': 'blank', 'type': 'text', 'text': ''},
+            ],
+          }),
+          ChatMessage.parse({
+            ...source,
+            'id': 'skill-message',
+            'text': skillPart['text'],
+            'parts': [skillPart],
+          }),
+        ];
+        update();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light,
+            home: Scaffold(
+              body: MediaQuery(
+                data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+                child: ConversationView(model: model.conversation),
+              ),
+            ),
+          ),
+        );
+        expect(find.byType(ToolRunView), findsOneWidget);
+        expect(find.text('Ran code, used a tool'), findsOneWidget);
+        expect(find.byType(ToolView), findsNothing);
+        await tester.tap(find.byType(ToolRunView));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Load skill: flutter-apply-architecture-best-practices'),
+          findsOneWidget,
+        );
+        expect(find.text(codePart['tool']['code']['source']), findsNothing);
+        final toggle = find.descendant(
+          of: find.byType(ToolView).first,
+          matching: find.byType(TextButton),
+        );
+        await tester.tap(toggle);
+        await tester.pump();
+        expect(find.text('Code'), findsOneWidget);
+        expect(find.text(codePart['tool']['code']['source']), findsOneWidget);
+        expect(find.text('3\n'), findsOneWidget);
+        codePart['tool']['code']['output'] =
+            '\x1b[31mupdated\x1b[0m\n<img src="https://example.test">';
+        update();
+        model.conversation.notifyListeners();
+        await tester.pump();
+        expect(
+          find.text('updated\n<img src="https://example.test">'),
+          findsOneWidget,
+        );
+        expect(find.byType(Image), findsNothing);
+        await tester.tap(toggle);
+        await tester.pump();
+        expect(find.bySemanticsLabel(RegExp('const total')), findsNothing);
+        expect(find.textContaining('updated'), findsNothing);
+        expect(
+          find.textContaining('PRIVATE_', findRichText: true),
+          findsNothing,
+        );
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        expect(tester.takeException(), isNull);
+        semantics.dispose();
+        await tester.pumpWidget(const SizedBox());
+        model.dispose();
+      },
+    );
+  }
+
+  testWidgets(
+    'V2 patch, read, fetch, execute and shell display shared summaries',
+    (tester) async {
+      final source = jsonDecode(
+        jsonEncode(_v2ToolsFixture['response']),
+      ) as Map<String, dynamic>;
+      final parts = source['parts'] as List<dynamic>;
+      for (var i = 0; i < parts.length; i++) {
+        parts[i]['id'] = 'part_$i';
+      }
+      final model = ChatViewModel(_Repository(), 'connector')
+        ..conversation.messages = [ChatMessage.parse(source)];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(body: ConversationView(model: model.conversation)),
+        ),
+      );
+      await tester.tap(find.byType(ToolRunView));
+      await tester.pumpAndSettle();
+      for (final description in [
+        'lib/example.dart',
+        'mobile/lib/main.dart',
+        'docs.example.test',
+        'Run code',
+        '"needle" in mobile/lib',
+      ]) {
+        expect(find.text(description), findsOneWidget);
+      }
+      expect(find.text("printf 'v2 shell\\n'"), findsNothing);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ToolView).at(1),
+          matching: find.byType(TextButton),
+        ),
+      );
+      await tester.pump();
+      expect(find.text("printf 'v2 shell\\n'"), findsOneWidget);
+      expect(find.text('v2 shell\n'), findsOneWidget);
+      expect(find.textContaining('PRIVATE_', findRichText: true), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      model.dispose();
+    },
+  );
 
   test(
     'shell fixture parses with strict fields and a shared display budget',
@@ -127,24 +273,27 @@ void main() {
     },
   );
 
-  test('a question tool call parses with a description and no shell sub-object', () {
-    final tool = ChatTool.parse({
-      'operation': 'question',
-      'status': 'completed',
-      'description': 'Environment: Local · Platform: Android',
-    });
-    expect(tool.operation, 'question');
-    expect(tool.description, 'Environment: Local · Platform: Android');
-    expect(tool.shell, isNull);
-    expect(
-      () => ChatTool.parse({
+  test(
+    'a question tool call parses with a description and no shell sub-object',
+    () {
+      final tool = ChatTool.parse({
         'operation': 'question',
         'status': 'completed',
-        'shell': {'command': '', 'output': '', 'truncated': false},
-      }),
-      throwsFormatException,
-    );
-  });
+        'description': 'Environment: Local · Platform: Android',
+      });
+      expect(tool.operation, 'question');
+      expect(tool.description, 'Environment: Local · Platform: Android');
+      expect(tool.shell, isNull);
+      expect(
+        () => ChatTool.parse({
+          'operation': 'question',
+          'status': 'completed',
+          'shell': {'command': '', 'output': '', 'truncated': false},
+        }),
+        throwsFormatException,
+      );
+    },
+  );
 
   for (final scale in [1.0, 2.0]) {
     testWidgets(
@@ -610,6 +759,7 @@ void main() {
     await model.openChat(model.chatList.chats.single);
     expect(repo.requests.last.containsKey('includeTools'), isFalse);
     expect(repo.requests.last.containsKey('includeShell'), isFalse);
+    expect(repo.requests.last.containsKey('includeCode'), isFalse);
     repo.tools = true;
     await model.refresh();
     expect(repo.requests.last['includeTools'], isTrue);
@@ -617,9 +767,13 @@ void main() {
     repo.shell = true;
     await model.refresh();
     expect(repo.requests.last['includeShell'], isTrue);
+    repo.code = true;
+    await model.refresh();
+    expect(repo.requests.last['includeCode'], isTrue);
     repo.tools = false;
     await model.refresh();
     expect(repo.requests.last.containsKey('includeShell'), isFalse);
+    expect(repo.requests.last.containsKey('includeCode'), isFalse);
     model.dispose();
   });
 
@@ -689,7 +843,10 @@ void main() {
         expect(find.text(label), findsNothing);
       }
       expect(find.bySemanticsLabel('Read target. Completed'), findsOneWidget);
-      expect(find.bySemanticsLabel('Question target. Completed'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Question target. Completed'),
+        findsOneWidget,
+      );
       expect(find.bySemanticsLabel('Tool. Completed'), findsOneWidget);
       expect(
         find.bySemanticsLabel('Tool Capture screen. Completed'),
@@ -855,16 +1012,15 @@ void main() {
         ),
       );
       await show();
-      final read = find.byKey(ValueKey(parts.first.id));
-      final search = find.byKey(ValueKey(parts[1].id));
-      expect(tester.getBottomLeft(read).dy, tester.getTopLeft(search).dy);
+      expect(find.byType(ToolRunView), findsOneWidget);
+      expect(find.text('Read a file, searched once'), findsOneWidget);
       expect(
         tester
             .widget<Padding>(find.byKey(const ValueKey('message-first')))
             .padding,
         EdgeInsets.zero,
       );
-      for (final id in ['user', 'second', 'prose']) {
+      for (final id in ['user', 'prose']) {
         expect(
           tester.widget<Padding>(find.byKey(ValueKey('message-$id'))).padding,
           const EdgeInsets.only(bottom: 12),
@@ -872,13 +1028,13 @@ void main() {
       }
       expect(find.byKey(const ValueKey('space')), findsNothing);
       expect(find.byKey(const ValueKey('space2')), findsNothing);
-      final before = tester.getTopLeft(search);
+      final before = tester.getTopLeft(find.byType(ToolRunView));
       model.conversation.messages = [
         const ChatMessage('older', 'user', 'Earlier message', false),
         ...model.conversation.messages,
       ];
       await show();
-      expect(tester.getTopLeft(search), before);
+      expect(tester.getTopLeft(find.byType(ToolRunView)), before);
       expect(tester.takeException(), isNull);
 
       model.conversation.messages = [
@@ -902,6 +1058,7 @@ void main() {
 class _Repository implements ChatRepository {
   bool tools = false;
   bool shell = false;
+  bool code = false;
   final requests = <Map<String, dynamic>>[];
   @override
   Stream<void> get chatConnectionChanges => const Stream.empty();
@@ -916,7 +1073,8 @@ class _Repository implements ChatRepository {
   @override
   bool chatSupports(String connectorId, String operation) =>
       (operation == 'chat.tools' && tools) ||
-      (operation == 'chat.shell' && shell);
+      (operation == 'chat.shell' && shell) ||
+      (operation == 'chat.code' && code);
   @override
   Future<Set<String>> pinnedChatIds(
     String connectorId,

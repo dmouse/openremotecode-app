@@ -249,6 +249,7 @@ void main() {
         'includeSubtasks': true,
         'includeTools': true,
         'includeShell': true,
+        'includeCode': true,
         'includeTodos': true,
       });
       repository.snapshotPending!.complete({
@@ -2009,6 +2010,7 @@ void main() {
         'includeSubtasks': true,
         'includeTools': true,
         'includeShell': true,
+        'includeCode': true,
         'includeTodos': true,
       });
       expect(model.loading, isTrue);
@@ -2498,6 +2500,7 @@ final class _Actions implements ChatRepository {
         if (body.containsKey('includeSubtasks')) 'includeSubtasks',
         if (body.containsKey('includeTools')) 'includeTools',
         if (body.containsKey('includeShell')) 'includeShell',
+        if (body.containsKey('includeCode')) 'includeCode',
         if (body.containsKey('includeTodos')) 'includeTodos',
       },
       'chat.rename' => {'projectId', 'sessionId', 'title'},
