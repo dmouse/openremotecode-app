@@ -43,6 +43,8 @@ void main() {
       await tester.tap(find.text('Sign in'));
       await tester.pumpAndSettle();
       expect(find.byType(WorkspaceScreen), findsOneWidget);
+      await tester.tap(find.byTooltip('App options'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sign out'));
@@ -70,6 +72,10 @@ void main() {
           connectionsRepositoryFactory: (_) => repository,
         ),
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('App options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Connect'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Enter pairing code'));
       await tester.pumpAndSettle();

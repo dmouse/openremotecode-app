@@ -31,62 +31,54 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'phone opens left sidebar and Connections is its first destination',
-    (tester) async {
-      await mount(tester, const Size(390, 844));
-      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.backgroundColor, AppTheme.background);
-      expect(find.byKey(const ValueKey('workspace-content')), findsOneWidget);
-      expect(find.text('Settings'), findsNothing);
-      await tester.tap(find.byTooltip('Open navigation menu'));
-      await tester.pumpAndSettle();
-      expect(
-        find.descendant(
-          of: find.byType(NavigationDrawerDestination).first,
-          matching: find.text('Connections'),
-        ),
-        findsOneWidget,
-      );
-      expect(tester.getTopLeft(find.byType(NavigationDrawer)).dx, 0);
-      await tester.tap(find.text('Settings'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('settings-content')), findsOneWidget);
-      expect(find.text('Settings'), findsOneWidget);
-      expect(
-        tester.state<ScaffoldState>(find.byType(Scaffold)).isDrawerOpen,
-        isFalse,
-      );
-      expect(find.text('Server address'), findsNothing);
-    },
-  );
+  testWidgets('phone starts on Chats and offers Connect then Settings', (
+    tester,
+  ) async {
+    await mount(tester, const Size(390, 844));
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.backgroundColor, AppTheme.background);
+    expect(find.text('Chats'), findsOneWidget);
+    expect(find.text('Settings'), findsNothing);
+    await tester.tap(find.byTooltip('App options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Connect')).dy,
+      lessThan(tester.getTopLeft(find.text('Settings')).dy),
+    );
+    expect(find.byType(NavigationDrawer), findsNothing);
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings-content')), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chats'), findsOneWidget);
+    expect(find.text('Server address'), findsNothing);
+  });
 
-  testWidgets('wide screen keeps sidebar visible and highlights Settings', (
+  testWidgets('wide screen uses the same overflow menu without a sidebar', (
     tester,
   ) async {
     await mount(tester, const Size(1000, 800));
     expect(find.byTooltip('Open navigation menu'), findsNothing);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.byType(NavigationDrawer), findsNothing);
+    await tester.tap(find.byTooltip('App options'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('settings-content')), findsOneWidget);
-    expect(
-      tester
-          .widget<NavigationDrawer>(find.byType(NavigationDrawer))
-          .selectedIndex,
-      1,
-    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('sidebar remains usable on small screens with large text', (
+  testWidgets('overflow menu remains usable on small screens with large text', (
     tester,
   ) async {
     await mount(tester, const Size(320, 568));
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.tap(find.byTooltip('App options'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Settings'));
@@ -104,7 +96,7 @@ void main() {
     await mount(tester, const Size(320, 640), settings: settings);
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.tap(find.byTooltip('App options'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();

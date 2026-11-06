@@ -26,9 +26,11 @@ class ChatFlowScreen extends StatefulWidget {
     required this.connectorId,
     required this.connectionName,
     this.settings,
-  }) : initialProject = null,
-       initialChat = null,
-       parentSessionId = null,
+    this.initialProject,
+    this.initialChat,
+    this.directConversation = false,
+    this.drafts,
+  }) : parentSessionId = null,
        subtaskDepth = 0;
   const ChatFlowScreen._subtask({
     required this.repository,
@@ -39,7 +41,8 @@ class ChatFlowScreen extends StatefulWidget {
     required this.parentSessionId,
     required this.subtaskDepth,
     required this.settings,
-  });
+  }) : directConversation = false,
+       drafts = null;
   final ChatRepository repository;
   final String connectorId, connectionName;
   final RemoteProject? initialProject;
@@ -47,6 +50,8 @@ class ChatFlowScreen extends StatefulWidget {
   final String? parentSessionId;
   final int subtaskDepth;
   final SettingsViewModel? settings;
+  final bool directConversation;
+  final Map<String, String>? drafts;
   @override
   State<ChatFlowScreen> createState() => _ChatFlowScreenState();
 }
@@ -65,7 +70,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
   final _modelSearch = TextEditingController();
   ChatPage? previousPage;
   String? previousChat;
-  final _drafts = <String, String>{};
+  late final _drafts = widget.drafts ?? <String, String>{};
   bool _detailsOpen = false;
   bool _subtaskOpen = false;
   bool _modePickerOpen = false;
@@ -80,12 +85,23 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
     if (widget.initialChat case final chat?) {
       model.project = widget.initialProject;
       unawaited(model.openChat(chat));
+    } else if (widget.directConversation && widget.initialProject != null) {
+      model.project = widget.initialProject;
+      model.page = ChatPage.chats;
+      model.startNewChat();
     } else {
       unawaited(model.refresh());
     }
   }
 
   void _changed() {
+    if (widget.directConversation && model.page != ChatPage.conversation) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+          Navigator.pop(context);
+        }
+      });
+    }
     if (model.isSubtask && (model.trustLost || model.project == null)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && ModalRoute.of(context)?.isCurrent == true) {
@@ -114,15 +130,18 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
     if (previousChat != nextChat) {
       if (previousChat != null &&
           previousChat != 'chat:${model.chatList.lastDeletedChatId}') {
-        _drafts[previousChat!] = draft.text;
+        _drafts[previousChat!.startsWith('draft:') ? 'new' : previousChat!] =
+            draft.text;
       }
       if (createdFromDraft && nextChat != null) {
         _drafts[nextChat] = draft.text;
-        _drafts.remove(previousChat);
+        _drafts.remove('new');
       }
       if (_drafts.length > 10) _drafts.remove(_drafts.keys.first);
       previousChat = nextChat;
-      draft.text = _drafts[previousChat] ?? '';
+      draft.text =
+          _drafts[nextChat?.startsWith('draft:') == true ? 'new' : nextChat] ??
+          '';
     }
   }
 
@@ -131,6 +150,10 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
       model.setActive(state == AppLifecycleState.resumed);
   @override
   void dispose() {
+    if (!model.trustLost && previousChat != null) {
+      _drafts[previousChat!.startsWith('draft:') ? 'new' : previousChat!] =
+          draft.text;
+    }
     WidgetsBinding.instance.removeObserver(this);
     model.removeListener(_changed);
     model.dispose();
@@ -403,7 +426,10 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
         ChatPage.conversation => model.conversation.chat?.title ?? 'New chat',
       };
       return PopScope(
-        canPop: model.isSubtask || model.page == ChatPage.projects,
+        canPop:
+            widget.directConversation ||
+            model.isSubtask ||
+            model.page == ChatPage.projects,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) model.back();
         },
@@ -415,7 +441,9 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
             title: title,
             busy: busy,
             onBack: () {
-              if (model.isSubtask || model.page == ChatPage.projects) {
+              if (widget.directConversation ||
+                  model.isSubtask ||
+                  model.page == ChatPage.projects) {
                 Navigator.pop(context);
               } else {
                 model.back();

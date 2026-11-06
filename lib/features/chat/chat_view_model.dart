@@ -28,6 +28,7 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
     this.repository,
     this.connectorId, {
     this.parentSessionId,
+    this.reconcileConnectionChanges = true,
     SettingsViewModel? settings,
   }) : _settings =
            settings ?? SettingsViewModel(PreferencesSettingsRepository()),
@@ -128,7 +129,9 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       // changed instead of collapsing an already-loaded history down to the
       // latest page, which would otherwise reset the reader's scroll
       // position on every reconnect (including routine relay lease renewal).
-      if (nowOnline && _active) unawaited(refresh(resetHistory: false));
+      if (nowOnline && _active && reconcileConnectionChanges) {
+        unawaited(refresh(resetHistory: false));
+      }
     });
   }
 
@@ -156,6 +159,7 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
   final ChatRepository repository;
   final String connectorId;
   final String? parentSessionId;
+  final bool reconcileConnectionChanges;
   bool get isSubtask => parentSessionId != null;
   bool get supportsSubtasks => conversation.supportsSubtasks;
 
@@ -228,7 +232,7 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
       _busyGate.chatAction == null &&
       repository.chatTrusted(connectorId);
 
-  void setActive(bool active) {
+  void setActive(bool active, {bool reconcile = true}) {
     _active = active;
     if (!active) {
       conversation.stopLive();
@@ -243,7 +247,7 @@ final class ChatViewModel extends ChangeNotifier with ChatRequestScope {
     }
     // Resuming from background is not a user-requested reload either -- see
     // the connection listener above for why this merges instead of resetting.
-    if (active && online) unawaited(refresh(resetHistory: false));
+    if (active && online && reconcile) unawaited(refresh(resetHistory: false));
     if (!_disposed) notifyListeners();
     // `active` (via `online`) is read through an injected closure by
     // canSend/canRename/canDeleteCurrentChat/etc., so a widget listening

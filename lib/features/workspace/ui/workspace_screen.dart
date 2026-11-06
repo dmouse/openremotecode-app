@@ -12,7 +12,9 @@ import '../../connections/data/connections_repository.dart';
 import '../../connections/domain/remote_connection.dart';
 import '../../connections/ui/connections_screen.dart';
 import '../../connections/ui/pairing_sheet.dart';
-import 'workspace_sidebar.dart';
+import '../../chat/chats_home_view_model.dart';
+import '../../chat/chat_view_model.dart';
+import '../../chat/ui/chats_home_view.dart';
 import 'workspace_settings_view.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../chat/ui/chat_flow_screen.dart';
@@ -34,42 +36,50 @@ class WorkspaceScreen extends StatefulWidget {
 
 class _WorkspaceScreenState extends State<WorkspaceScreen>
     with WidgetsBindingObserver {
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
   late final _connections = ConnectionsViewModel(widget.repository);
   late final _settings =
       widget.settings ?? SettingsViewModel(PreferencesSettingsRepository());
-  bool _settingsSelected = false;
+  String? _destination;
+  ChatsHomeViewModel? _chats;
   bool _pairingOpen = false;
   bool _chatOpen = false;
+  bool _choosingProject = false;
   bool _deleteOpen = false;
 
-  Future<void> _openConnection(RemoteConnection connection) async {
-    if (_chatOpen || _connections.isMutating) return;
-    final repository = widget.repository;
-    if (connection.needsVerification) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Verify this connection before opening projects.'),
-        ),
-      );
+  Future<void> _openChat(ChatViewModel source, [HomeChat? entry]) async {
+    if (_chatOpen ||
+        !source.online ||
+        source.project == null ||
+        _chats?.sources.contains(source) != true ||
+        !_connections.connections.any((c) => c.id == source.connectorId)) {
       return;
     }
-    if (repository is! ChatRepository) return;
+    final project = source.project!;
+    final connectionName = _connections.connections
+        .firstWhere((c) => c.id == source.connectorId)
+        .name;
+    final drafts = _chats?.draftsFor(source);
     _chatOpen = true;
+    _chats?.setActive(false);
     try {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(
           builder: (_) => ChatFlowScreen(
-            repository: repository as ChatRepository,
-            connectorId: connection.id,
-            connectionName: connection.name,
+            repository: source.repository,
+            connectorId: source.connectorId,
+            connectionName: connectionName,
+            initialProject: project,
+            initialChat: entry?.chat,
+            directConversation: true,
+            drafts: drafts,
             settings: _settings,
           ),
         ),
       );
     } finally {
       _chatOpen = false;
+      if (mounted) _chats?.setActive(true);
     }
   }
 
@@ -77,6 +87,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.repository case final ChatRepository repository) {
+      _chats = ChatsHomeViewModel(
+        _connections,
+        repository,
+        settings: _settings,
+      );
+    }
     if (widget.settings == null) unawaited(_settings.load());
     unawaited(_connections.load());
   }
@@ -84,6 +101,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _connections.setActive(state == AppLifecycleState.resumed);
+    if (!_chatOpen) _chats?.setActive(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
       unawaited(widget.auth.validateOnResume());
       unawaited(_connections.load());
@@ -93,14 +111,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _chats?.dispose();
     _connections.dispose();
     if (widget.settings == null) _settings.dispose();
     super.dispose();
-  }
-
-  void _select(bool settings) {
-    _scaffoldKey.currentState?.closeDrawer();
-    setState(() => _settingsSelected = settings);
   }
 
   Future<void> _deleteAccount() async {
@@ -136,62 +150,100 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     }
   }
 
+  Future<void> _newChat() async {
+    final home = _chats;
+    if (home == null || _chatOpen || _choosingProject) return;
+    _choosingProject = true;
+    try {
+      final source = await chooseChatProject(context, home);
+      if (mounted && source != null) await _openChat(source);
+    } finally {
+      _choosingProject = false;
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final wide = constraints.maxWidth >= 720;
-      final sidebar = WorkspaceSidebar(
-        settingsSelected: _settingsSelected,
-        onSettingsSelected: () => _select(true),
-        onConnectionsSelected: () => _select(false),
-      );
-      final content = _settingsSelected
-          ? WorkspaceSettingsView(
-              auth: widget.auth,
-              settings: _settings,
-              onDeleteAccount: _deleteAccount,
-            )
-          : ConnectionsScreen(
+  Widget build(BuildContext context) => PopScope(
+    canPop: _destination == null,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) setState(() => _destination = null);
+    },
+    child: Scaffold(
+      backgroundColor: AppTheme.background,
+      appBar: AppBar(
+        backgroundColor: AppTheme.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        automaticallyImplyLeading: false,
+        leading: _destination == null
+            ? null
+            : BackButton(onPressed: () => setState(() => _destination = null)),
+        title: Text(switch (_destination) {
+          'settings' => 'Settings',
+          'connect' => 'Connections',
+          _ => 'Chats',
+        }),
+        actions: [
+          if (_destination == null)
+            PopupMenuButton<String>(
+              tooltip: 'App options',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) => setState(() => _destination = value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'connect', child: Text('Connect')),
+                PopupMenuItem(value: 'settings', child: Text('Settings')),
+              ],
+            ),
+          if (_destination == 'connect')
+            ListenableBuilder(
+              listenable: _connections,
+              builder: (context, _) => IconButton(
+                tooltip: 'Add connection',
+                onPressed: !_connections.isMutating ? _addConnection : null,
+                icon: const Icon(Icons.add),
+              ),
+            ),
+        ],
+      ),
+      body: SafeArea(
+        child: IndexedStack(
+          index: switch (_destination) {
+            'connect' => 1,
+            'settings' => 2,
+            _ => 0,
+          },
+          children: [
+            if (_chats case final home?)
+              ChatsHomeView(
+                model: home,
+                onOpen: (entry) => _openChat(entry.source, entry),
+                onConnect: () => setState(() => _destination = 'connect'),
+              )
+            else
+              const Center(
+                child: Text('Connect an OpenCode instance to view chats.'),
+              ),
+            ConnectionsScreen(
               key: const ValueKey('workspace-content'),
               viewModel: _connections,
               onAddConnection: _addConnection,
-              onOpenConnection: _openConnection,
-            );
-      return Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: AppTheme.background,
-        appBar: AppBar(
-          backgroundColor: AppTheme.background,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          automaticallyImplyLeading: !wide,
-          title: Text(_settingsSelected ? 'Settings' : 'Connections'),
-          actions: [
-            if (!_settingsSelected)
-              ListenableBuilder(
-                listenable: _connections,
-                builder: (context, _) => IconButton(
-                  tooltip: 'Add connection',
-                  onPressed: !_connections.isMutating ? _addConnection : null,
-                  icon: const Icon(Icons.add),
-                ),
-              ),
+            ),
+            WorkspaceSettingsView(
+              auth: widget.auth,
+              settings: _settings,
+              onDeleteAccount: _deleteAccount,
+            ),
           ],
         ),
-        drawer: wide ? null : sidebar,
-        body: SafeArea(
-          child: wide
-              ? Row(
-                  children: [
-                    SizedBox(width: 280, child: sidebar),
-                    const VerticalDivider(width: 1, thickness: 1),
-                    Expanded(child: content),
-                  ],
-                )
-              : content,
-        ),
-      );
-    },
+      ),
+      floatingActionButton: _destination == null && _chats != null
+          ? FloatingActionButton(
+              tooltip: 'New chat',
+              onPressed: _newChat,
+              child: const Icon(Icons.add_comment_outlined),
+            )
+          : null,
+    ),
   );
 }
