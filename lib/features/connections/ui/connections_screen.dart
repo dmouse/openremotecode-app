@@ -7,6 +7,8 @@ import '../../../ui/core/rename_dialog.dart';
 import '../connections_view_model.dart';
 import '../domain/remote_connection.dart';
 import 'connection_card.dart';
+import '../domain/connection_color.dart';
+import '../../../ui/core/chat_avatar.dart';
 
 class ConnectionsScreen extends StatelessWidget {
   const ConnectionsScreen({
@@ -18,6 +20,41 @@ class ConnectionsScreen extends StatelessWidget {
   final ConnectionsViewModel viewModel;
   final VoidCallback onAddConnection;
   final ValueChanged<RemoteConnection>? onOpenConnection;
+
+  Future<void> _color(BuildContext context, RemoteConnection connection) async {
+    final color = await showModalBottomSheet<ConnectionColor>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(
+                title: Text('Connection color'),
+                subtitle: Text('Saved on this device'),
+              ),
+              for (final color in ConnectionColor.values)
+                ListTile(
+                  leading: ChatAvatar(color: color, size: 32),
+                  title: Text(
+                    color == ConnectionColor.lime
+                        ? 'Default'
+                        : '${color.name[0].toUpperCase()}${color.name.substring(1)}',
+                  ),
+                  trailing: viewModel.colorFor(connection.id) == color
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () => Navigator.pop(context, color),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (color != null) await viewModel.setColor(connection.id, color);
+  }
 
   Future<void> _rename(
     BuildContext context,
@@ -136,6 +173,10 @@ class ConnectionsScreen extends StatelessWidget {
                 return ConnectionCard(
                   key: ValueKey(connection.id),
                   connection: connection,
+                  color: viewModel.colorFor(connection.id),
+                  onColor: viewModel.isMutating
+                      ? null
+                      : () => _color(context, connection),
                   isSelected: viewModel.selectedId == connection.id,
                   onSelect: viewModel.isMutating
                       ? null

@@ -1,5 +1,11 @@
 import '../domain/pairing_review.dart';
 import '../domain/remote_connection.dart';
+import '../domain/connection_color.dart';
+
+abstract interface class ConnectionAppearance {
+  Future<ConnectionColor> readConnectionColor(String connectorId);
+  Future<void> writeConnectionColor(String connectorId, ConnectionColor color);
+}
 
 abstract interface class ConnectionsRepository {
   Future<List<RemoteConnection>> listConnections();

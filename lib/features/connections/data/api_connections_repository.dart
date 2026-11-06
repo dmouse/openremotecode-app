@@ -14,9 +14,15 @@ import '../domain/remote_connection.dart';
 import '../domain/connection_name.dart';
 import 'connections_repository.dart';
 import 'device_identity.dart';
+import 'connection_color_store.dart';
+import '../domain/connection_color.dart';
 
 final class ApiConnectionsRepository
-    implements ConnectionsRepository, ConnectionsPresence, ChatRepository {
+    implements
+        ConnectionsRepository,
+        ConnectionsPresence,
+        ChatRepository,
+        ConnectionAppearance {
   ApiConnectionsRepository(this.auth)
     : scope = auth.session!.scope,
       identities = DeviceIdentityStore(auth.store, auth.session!.scope),
@@ -26,6 +32,25 @@ final class ApiConnectionsRepository
   final String scope;
   final DeviceIdentityStore identities;
   final ChatPinStore pins;
+  late final _colors = ConnectionColorStore(auth.store, scope);
+  @override
+  Future<ConnectionColor> readConnectionColor(String connectorId) async {
+    _checkSession();
+    final color = await _colors.read(connectorId);
+    _checkSession();
+    return color;
+  }
+
+  @override
+  Future<void> writeConnectionColor(
+    String connectorId,
+    ConnectionColor color,
+  ) async {
+    _checkSession();
+    await _colors.write(connectorId, color);
+    _checkSession();
+  }
+
   Map<String, dynamic>? _record;
   Future<Map<String, dynamic>>? _loadingDevice;
   Map<String, dynamic>? _pending;

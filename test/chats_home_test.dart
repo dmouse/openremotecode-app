@@ -9,6 +9,7 @@ import 'package:openremotecode/features/connections/data/connections_repository.
 import 'package:openremotecode/features/connections/domain/remote_connection.dart';
 import 'package:openremotecode/features/workspace/ui/workspace_screen.dart';
 import 'package:openremotecode/ui/core/app_theme.dart';
+import 'package:openremotecode/ui/core/chat_avatar.dart';
 
 import 'support/auth_fakes.dart';
 
@@ -230,6 +231,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Chats'), findsOneWidget);
       expect(find.text('a conversation'), findsOneWidget);
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Laptop'))
+            .labelStyle!
+            .fontSize,
+        13,
+      );
+      final color = tester
+          .widget<ChatAvatar>(find.byType(ChatAvatar).first)
+          .color;
       await tester.tap(find.widgetWithText(ChoiceChip, 'Laptop'));
       await tester.pumpAndSettle();
       expect(find.text('b conversation'), findsNothing);
@@ -238,6 +249,10 @@ void main() {
       await tester.tap(find.widgetWithText(ListTile, 'a conversation'));
       await tester.pumpAndSettle();
       expect(repo.calls.last, ('a', 'chat.snapshot'));
+      expect(
+        tester.widget<ChatAvatar>(find.byType(ChatAvatar).first).color,
+        color,
+      );
       await tester.enterText(
         find.byKey(const ValueKey('chat-composer')),
         'Unsent draft',

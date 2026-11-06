@@ -72,6 +72,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
             repository: source.repository,
             connectorId: source.connectorId,
             connectionName: connectionName,
+            connectionColor: _connections.colorFor(source.connectorId),
             initialProject: project,
             initialChat: entry?.chat,
             directConversation: true,

@@ -7,6 +7,7 @@ import '../../platform/remote_api.dart';
 import 'data/connections_repository.dart';
 import 'domain/remote_connection.dart';
 import 'domain/connection_name.dart';
+import 'domain/connection_color.dart';
 
 final class ConnectionsViewModel extends ChangeNotifier {
   ConnectionsViewModel(this.repository) {
@@ -31,6 +32,36 @@ final class ConnectionsViewModel extends ChangeNotifier {
   String? _deletingId;
   String? _renamingId;
   String? _selectedId;
+  final _colors = <String, ConnectionColor>{};
+  String? _colorSaving;
+  ConnectionColor colorFor(String id) => _colors[id] ?? ConnectionColor.lime;
+  Future<bool> setColor(String id, ConnectionColor color) async {
+    if (_disposed || isMutating || !_connections.any((c) => c.id == id)) {
+      return false;
+    }
+    _revision++;
+    _loading = false;
+    _colorSaving = id;
+    _error = null;
+    notifyListeners();
+    try {
+      if (repository case final ConnectionAppearance appearance) {
+        await appearance.writeConnectionColor(id, color);
+      }
+      if (_disposed || !_connections.any((c) => c.id == id)) return false;
+      _colors[id] = color;
+      return true;
+    } catch (_) {
+      if (!_disposed) {
+        _error = 'The connection color could not be saved. Please try again.';
+      }
+      return false;
+    } finally {
+      _colorSaving = null;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
   StreamSubscription<Map<String, ConnectionStatus>>? _presenceSubscription;
 
   List<RemoteConnection> get connections => _connections;
@@ -38,7 +69,8 @@ final class ConnectionsViewModel extends ChangeNotifier {
   String? get error => _error;
   String? get deletingId => _deletingId;
   String? get renamingId => _renamingId;
-  bool get isMutating => _deletingId != null || _renamingId != null;
+  bool get isMutating =>
+      _deletingId != null || _renamingId != null || _colorSaving != null;
   String? get selectedId => _selectedId;
 
   // Selection is local UI state; it does not authorize or connect a device.
@@ -59,6 +91,21 @@ final class ConnectionsViewModel extends ChangeNotifier {
       final connections = await repository.listConnections();
       if (_disposed || revision != _revision) return;
       _connections = _sorted(connections.map(_withPresence).toList());
+      if (repository case final ConnectionAppearance appearance) {
+        for (final connection in _connections) {
+          try {
+            final color = await appearance.readConnectionColor(connection.id);
+            if (_disposed || revision != _revision) return;
+            _colors[connection.id] = color;
+          } catch (_) {
+            if (!_disposed) {
+              _error = 'Some connection colors could not be loaded.';
+            }
+          }
+        }
+      }
+      if (_disposed || revision != _revision) return;
+      _colors.removeWhere((id, _) => !_connections.any((c) => c.id == id));
       if (!_connections.any((connection) => connection.id == _selectedId)) {
         _selectedId = null;
       }

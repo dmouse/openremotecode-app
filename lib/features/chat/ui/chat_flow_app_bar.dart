@@ -6,6 +6,7 @@ import '../../../ui/core/app_theme.dart';
 import '../chat_view_model.dart';
 import '../voice_view_model.dart';
 import 'conversation_header.dart';
+import '../../connections/domain/connection_color.dart';
 import 'voice_controls.dart';
 
 /// Builds the chat flow's app bar: title varies by page (connection name,
@@ -29,6 +30,7 @@ class ChatFlowAppBar {
     required VoidCallback onBack,
     required VoidCallback onOpenDetails,
     required VoidCallback onRename,
+    ConnectionColor connectionColor = ConnectionColor.lime,
     VoiceViewModel? voice,
     VoidCallback? onStartCall,
   }) {
@@ -56,6 +58,7 @@ class ChatFlowAppBar {
       title: page == ChatPage.conversation
           ? ConversationHeader(
               online: model.online,
+              connectionColor: connectionColor,
               working: conversation.isWorking,
               model: conversation,
               title: title,

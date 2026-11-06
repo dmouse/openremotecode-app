@@ -26,6 +26,15 @@ restores the list's filter, search and scroll. Long press retains pin/delete
 actions. New chat opens an online authorized-project chooser scoped to the filter;
 choosing it only opens a draft, not a remote session.
 
+Filter labels are 13 logical pixels before system text scaling, without reducing
+their padded touch targets. Connect > a machine's options > Color offers Default,
+Blue, Purple, Teal, Orange and Rose. This device-local choice is stored under a
+hashed server/account/connector scope in native secure storage. Renaming does not
+change it, and failed writes retain the last acknowledged color. Filter dots and
+chat avatars use the chosen accent. The list and conversation header share the
+same chat-bubble glyph; the header retains its separate presence/working badge.
+Neither color nor its selection changes identity, trust, status or authorization.
+
 Discovery and pagination use the existing encrypted project/chat requests,
 serialized across sources with existing per-project retention and page limits.
 Search filters loaded titles and continues pagination near the end of results.

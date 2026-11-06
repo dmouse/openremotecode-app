@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../ui/core/inline_notice.dart';
 import '../../../ui/core/search_field.dart';
+import '../../../ui/core/chat_avatar.dart';
 import '../chat_view_model.dart';
 import '../chats_home_view_model.dart';
 
@@ -153,6 +154,8 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
               children: [
                 ChoiceChip(
                   label: const Text('All'),
+                  labelStyle: Theme.of(context).textTheme.labelMedium
+                      ?.copyWith(fontSize: 13),
                   selected: model.selectedMachine == null,
                   onSelected: (_) {
                     model.selectMachine(null);
@@ -164,6 +167,16 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
                     padding: const EdgeInsets.only(left: 8),
                     child: ChoiceChip(
                       label: Text(machine.name),
+                      labelStyle: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(fontSize: 13),
+                      avatar: ExcludeSemantics(
+                        child: CircleAvatar(
+                          radius: 6,
+                          backgroundColor: connectionAccent(
+                            model.connections.colorFor(machine.id),
+                          ),
+                        ),
+                      ),
                       tooltip: '${machine.name}: ${machine.statusLabel}',
                       selected: model.selectedMachine == machine.id,
                       onSelected: (_) {
@@ -223,8 +236,10 @@ class _ChatsHomeViewState extends State<ChatsHomeView> {
                           contentPadding: const EdgeInsets.symmetric(
                             vertical: 8,
                           ),
-                          leading: const CircleAvatar(
-                            child: Icon(Icons.chat_bubble_outline),
+                          leading: ChatAvatar(
+                            color: model.connections.colorFor(
+                              entry.connection.id,
+                            ),
                           ),
                           title: Text(
                             entry.chat.title,

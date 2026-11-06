@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../ui/core/app_theme.dart';
 import '../../../ui/core/inline_notice.dart';
+import '../../connections/domain/connection_color.dart';
 import '../chat_view_model.dart';
 import '../data/chat_repository.dart';
 import '../data/voice_transport.dart';
@@ -35,6 +36,7 @@ class ChatFlowScreen extends StatefulWidget {
     this.initialChat,
     this.directConversation = false,
     this.drafts,
+    this.connectionColor = ConnectionColor.lime,
   }) : parentSessionId = null,
        subtaskDepth = 0;
   const ChatFlowScreen._subtask({
@@ -46,6 +48,7 @@ class ChatFlowScreen extends StatefulWidget {
     required this.parentSessionId,
     required this.subtaskDepth,
     required this.settings,
+    required this.connectionColor,
   }) : voiceRecorderFactory = null,
        directConversation = false,
        drafts = null;
@@ -59,6 +62,7 @@ class ChatFlowScreen extends StatefulWidget {
   final VoiceRecorder Function()? voiceRecorderFactory;
   final bool directConversation;
   final Map<String, String>? drafts;
+  final ConnectionColor connectionColor;
   @override
   State<ChatFlowScreen> createState() => _ChatFlowScreenState();
 }
@@ -473,6 +477,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
             connectionName: widget.connectionName,
             settings: widget.settings,
             initialProject: project,
+            connectionColor: widget.connectionColor,
             parentSessionId: parent.id,
             subtaskDepth: widget.subtaskDepth + 1,
             initialChat: RemoteChat(
@@ -514,6 +519,7 @@ class _ChatFlowScreenState extends State<ChatFlowScreen>
           appBar: ChatFlowAppBar.build(
             context,
             model: model,
+            connectionColor: widget.connectionColor,
             title: title,
             busy: busy,
             onBack: () {

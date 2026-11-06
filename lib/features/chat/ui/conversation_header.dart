@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../ui/core/app_theme.dart';
+import '../../../ui/core/chat_avatar.dart';
+import '../../connections/domain/connection_color.dart';
 import '../conversation_view_model.dart';
 import 'activity_animation.dart';
 import 'activity_presentation.dart';
@@ -18,6 +20,7 @@ class ConversationHeader extends StatelessWidget {
     required this.model,
     required this.title,
     this.onOpenDetails,
+    this.connectionColor = ConnectionColor.lime,
   });
 
   final bool online;
@@ -25,6 +28,7 @@ class ConversationHeader extends StatelessWidget {
   final ConversationViewModel model;
   final String title;
   final VoidCallback? onOpenDetails;
+  final ConnectionColor connectionColor;
 
   /// The selected model, plus its effort when one is set. Null (no second
   /// line at all) when no explicit model choice has been made -- OpenCode's
@@ -50,7 +54,7 @@ class ConversationHeader extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.center,
     children: [
-      _HeaderAvatar(online: online, working: working),
+      _HeaderAvatar(online: online, working: working, color: connectionColor),
       const SizedBox(width: 10),
       Expanded(
         child: onOpenDetails == null
@@ -120,7 +124,12 @@ Widget _headerLines(
 /// outlined and muted when not, so status never rests on color alone. See
 /// docs/design.md, "Conversation header and actions".
 class _HeaderAvatar extends StatelessWidget {
-  const _HeaderAvatar({required this.online, required this.working});
+  const _HeaderAvatar({
+    required this.online,
+    required this.working,
+    required this.color,
+  });
+  final ConnectionColor color;
 
   final bool online;
   final bool working;
@@ -141,19 +150,7 @@ class _HeaderAvatar extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Container(
-            width: _size,
-            height: _size,
-            decoration: const BoxDecoration(
-              color: AppTheme.lime,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.smart_toy_outlined,
-              size: 18,
-              color: AppTheme.ink,
-            ),
-          ),
+          ChatAvatar(color: color, size: _size),
           // The badge rides the avatar's corner, on a ring of the bar's own
           // colour so it stays legible against the lime disc. The spinner is
           // the same activity pulse the conversation's rows use; the bar sits

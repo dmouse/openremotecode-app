@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../ui/core/app_theme.dart';
 import '../../../ui/core/status_badge.dart';
 import '../domain/remote_connection.dart';
+import '../domain/connection_color.dart';
+import '../../../ui/core/chat_avatar.dart';
 
 class ConnectionCard extends StatelessWidget {
   const ConnectionCard({
@@ -15,6 +17,8 @@ class ConnectionCard extends StatelessWidget {
     this.onRename,
     this.isDeleting = false,
     this.isRenaming = false,
+    this.color = ConnectionColor.lime,
+    this.onColor,
   });
   final RemoteConnection connection;
   final bool isSelected;
@@ -24,6 +28,8 @@ class ConnectionCard extends StatelessWidget {
   final VoidCallback? onRename;
   final bool isDeleting;
   final bool isRenaming;
+  final ConnectionColor color;
+  final VoidCallback? onColor;
 
   bool get _isOffline => connection.status == ConnectionStatus.offline;
 
@@ -55,7 +61,11 @@ class ConnectionCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.computer_rounded, size: 28),
+              CircleAvatar(
+                backgroundColor: connectionAccent(color),
+                foregroundColor: AppTheme.ink,
+                child: const Icon(Icons.computer_rounded, size: 24),
+              ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -123,10 +133,13 @@ class ConnectionCard extends StatelessWidget {
               else
                 PopupMenuButton<_ConnectionAction>(
                   tooltip: 'Connection options',
-                  enabled: onRename != null || onDelete != null,
+                  enabled:
+                      onRename != null || onDelete != null || onColor != null,
                   icon: const Icon(Icons.more_vert),
                   onSelected: (action) {
                     switch (action) {
+                      case _ConnectionAction.color:
+                        onColor?.call();
                       case _ConnectionAction.rename:
                         onRename?.call();
                       case _ConnectionAction.delete:
@@ -134,6 +147,11 @@ class ConnectionCard extends StatelessWidget {
                     }
                   },
                   itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: _ConnectionAction.color,
+                      enabled: onColor != null,
+                      child: const Text('Color'),
+                    ),
                     PopupMenuItem(
                       value: _ConnectionAction.rename,
                       enabled: onRename != null,
@@ -154,4 +172,4 @@ class ConnectionCard extends StatelessWidget {
   );
 }
 
-enum _ConnectionAction { rename, delete }
+enum _ConnectionAction { rename, delete, color }
